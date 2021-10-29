@@ -28,6 +28,7 @@ logger.info(option.dict2str(opt))
 #### Create test dataset and dataloader
 test_loaders = []
 for phase, dataset_opt in sorted(opt['datasets'].items()):
+    logger.info(dataset_opt)
     test_set = create_dataset(dataset_opt)
     test_loader = create_dataloader(test_set, dataset_opt)
     logger.info('Number of test images in [{:s}]: {:d}'.format(dataset_opt['name'], len(test_set)))
@@ -40,6 +41,7 @@ for test_loader in test_loaders:
     test_start_time = time.time()
     dataset_dir = osp.join(opt['path']['results_root'], test_set_name)
     util.mkdir(dataset_dir)
+    logger.info("CheckPoint1")
 
     test_results = OrderedDict()
     test_results['psnr'] = []
@@ -53,6 +55,7 @@ for test_loader in test_loaders:
     test_results['ssim_y_lr'] = []
 
     for data in test_loader:
+        logger.info(data)
         model.feed_data(data)
         img_path = data['GT_path'][0]
         img_name = osp.splitext(osp.basename(img_path))[0]

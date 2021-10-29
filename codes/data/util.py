@@ -2,20 +2,34 @@ import os
 import math
 import pickle
 import random
+import sys
+
 import numpy as np
 import torch
 import cv2
+import vtk
+import itk
+import SimpleITK as sitk
+
+from .tensor_generator import TensorGenerator
 
 ####################
 # Files & IO
 ####################
 
 ###################### get image path list ######################
+
 IMG_EXTENSIONS = ['.jpg', '.JPG', '.jpeg', '.JPEG', '.png', '.PNG', '.ppm', '.PPM', '.bmp', '.BMP']
+
+VTK_EXTENSIONS = ['.vti', '.VTI']
 
 
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
+
+
+def is_vtk_file(filename):
+    return any(filename.endswith(extension) for extension in VTK_EXTENSIONS)
 
 
 def _get_paths_from_images(path):
@@ -29,6 +43,18 @@ def _get_paths_from_images(path):
                 images.append(img_path)
     assert images, '{:s} has no valid image file'.format(path)
     return images
+
+
+def _get_paths_from_vti(path):
+    assert os.path.isdir(path), '{:s} is not a valid directory'.format(path)
+    vtis = []
+    for dirpath, _, fnames in sorted(os.walk(path)):
+        for fname in sorted(fnames):
+            if is_vtk_file(fname):
+                vti_path = os.path.join(dirpath, fname)
+                vtis.append(vti_path)
+    assert vtis, '{:s} has no valid vti file'.format(path)
+    return vtis
 
 
 def _get_paths_from_lmdb(dataroot):
@@ -55,6 +81,14 @@ def get_image_paths(data_type, dataroot):
     return paths, sizes
 
 
+def get_vti_paths(dataroot):
+    '''get vti files' paths list'''
+    paths = None
+    if dataroot is not None:
+        paths = sorted(_get_paths_from_vti(dataroot))
+    return paths
+
+
 ###################### read images ######################
 def _read_img_lmdb(env, key, size):
     '''read image from lmdb with key (w/ and w/o fixed size)
@@ -71,7 +105,7 @@ def read_img(env, path, size=None):
     '''read image by cv2 or from lmdb
     return: Numpy float32, HWC, BGR, [0,1]'''
     if env is None:  # img
-        #img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        # img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
         img = cv2.imread(path, cv2.IMREAD_COLOR)
     else:
         img = _read_img_lmdb(env, path, size)
@@ -82,6 +116,17 @@ def read_img(env, path, size=None):
     if img.shape[2] > 3:
         img = img[:, :, :3]
     return img
+
+
+def get_TensorGenerator(path):
+    '''
+    read vti by vtk's reader
+    return tensor of volume dataset
+    '''
+    generator = TensorGenerator()
+    generator.set_path(path)
+    generator.update()
+    return generator
 
 
 ####################
@@ -239,6 +284,62 @@ def modcrop(img_in, scale):
     return img
 
 
+def modcrop_3d(vti_in, scale):
+    vti = np.copy(vti_in)
+    if vti.ndim == 3:
+        Z, Y, X = vti.shape
+        Z_r, Y_r, X_r = Z % scale, Y % scale, X % scale
+        vti = vti[:Z - Z_r, :Y - Y_r, :X - X_r]
+    else:
+        raise ValueError('Wrong img ndim: [{:d}].'.format(vti.ndim))
+    return vti
+
+
+def transform_to_ITK(arr):
+    '''
+    luminanceFilter = vtk.vtkImageLuminance()
+    luminanceFilter.SetInputConnection(self.reader.GetOutputPort())
+    luminanceFilter.Update()
+
+    VTKImage2ITKImageFilter = itk.image_from_vtk_image(luminanceFilter.GetOutput())
+    VTKImage2ITKImageFilter.Update()
+    itk_data = VTKImage2ITKImageFilter.GetOutput()
+    resampler =
+    '''
+    if arr is None:
+        ex = Exception("Error: Data doesn't exist")
+        raise ex
+
+    itkImage = itk.GetImageFromArray(arr=arr, is_vector=False)
+
+    return itkImage
+
+
+def resize_3d(arr, newsize, resamplemethod=sitk.sitkNearestNeighbor):
+    resampled = None
+    for i in range(len(arr)):
+        subarr = arr[i]
+        itkImage = transform_to_ITK(subarr)
+        resampler = sitk.ResampleImageFilter()
+        originSize = itkImage.GetSize()
+        originSpacing = itkImage.GetSpacing()
+        newSize = np.array(newsize, float)
+        factor = originSize / newSize
+        newSpacing = originSpacing * factor
+        newSize = newSize.astype(np.int)
+        resampler.SetReferenceImage(itkImage)
+        resampler.SetSize(newSize.tolist())
+        resampler.SetOutputSpacing(newSpacing.tolist())
+        resampler.SetTransform(sitk.Transform(3, sitk.sitkIdentity))
+        resampler.SetInterpolator(resamplemethod)
+        itkImgResampled = resampler.Execute(itkImage)
+        if resampled is None:
+            resampled = np.ndarray([len(arr)] + itkImgResampled.shape)
+        resampled[i] = itkImgResampled
+
+    return resampled
+
+
 ####################
 # Functions
 ####################
@@ -247,11 +348,13 @@ def modcrop(img_in, scale):
 # matlab 'imresize' function, now only support 'bicubic'
 def cubic(x):
     absx = torch.abs(x)
-    absx2 = absx**2
-    absx3 = absx**3
+    absx2 = absx ** 2
+    absx3 = absx ** 3
     return (1.5 * absx3 - 2.5 * absx2 + 1) * (
         (absx <= 1).type_as(absx)) + (-0.5 * absx3 + 2.5 * absx2 - 4 * absx + 2) * ((
-            (absx > 1) * (absx <= 2)).type_as(absx))
+            (absx > 1) * (
+            absx <= 2)).type_as(
+        absx))
 
 
 def calculate_weights_indices(in_length, out_length, scale, kernel, kernel_width, antialiasing):
@@ -448,15 +551,105 @@ def imresize_np(img, scale, antialiasing=True):
     return out_2.numpy()
 
 
+def imresize3_np(vti, scale, antialiasing=True):
+    vti = torch.from_numpy(vti)
+
+    in_Z, in_Y, in_X = vti.size()
+    out_Z, out_Y, out_X = math.ceil(in_Z * scale), math.ceil(in_Y * scale), math.ceil(in_X * scale)
+    kernel_width = 4
+    kernel = 'cubic'
+
+    weights_Z, indices_Z, sym_len_Zs, sym_len_Ze = calculate_weights_indices(
+        in_Z, out_Z, scale, kernel, kernel_width, antialiasing)
+    weights_Y, indices_Y, sym_len_Ys, sym_len_Ye = calculate_weights_indices(
+        in_Y, out_Y, scale, kernel, kernel_width, antialiasing)
+    weights_X, indices_X, sym_len_Xs, sym_len_Xe = calculate_weights_indices(
+        in_X, out_X, scale, kernel, kernel_width, antialiasing)
+
+    # process Z dimension
+    vti_aug = torch.FloatTensor(in_Z + sym_len_Zs + sym_len_Ze, in_Y, in_X)
+    vti_aug.narrow(0, sym_len_Zs, in_Z).copy_(vti)
+
+    sym_patch = vti[:sym_len_Zs, :, :]
+    inv_idx = torch.arange(sym_patch.size(0) - 1, -1, -1).long()
+    sym_patch_inv = sym_patch.index_select(0, inv_idx)
+    vti_aug.narrow(0, 0, sym_len_Zs).copy_(sym_patch_inv)
+
+    sym_patch = vti[-sym_len_Ze:, :, :]
+    inv_idx = torch.arange(sym_patch.size(0) - 1, -1, -1).long()
+    sym_patch_inv = sym_patch.index_select(0, inv_idx)
+    vti_aug.narrow(0, sym_len_Zs + in_Z, sym_len_Ze).copy_(sym_patch_inv)
+
+    out_1 = torch.FloatTensor(out_Z, in_Y, in_X)
+    kernel_width = weights_Z.size(1)
+    for i in range(out_Z):
+        idx = int(indices_Z[i][0])
+        for j in range(in_X):
+            out_1[i, :, j] = vti_aug[idx:idx + kernel_width, :, j].transpose(0, 1).mv(weights_Z[i])
+        # out_1[i, :, 0] = vti_aug[idx:idx + kernel_width, :, 0].transpose(0, 1).mv(weights_Z[i])
+        # out_1[i, :, 1] = vti_aug[idx:idx + kernel_width, :, 1].transpose(0, 1).mv(weights_Z[i])
+        # out_1[i, :, 2] = vti_aug[idx:idx + kernel_width, :, 2].transpose(0, 1).mv(weights_Z[i])
+
+    # process Y dimension
+    out_1_aug = torch.FloatTensor(out_Z, in_Y + sym_len_Ys + sym_len_Ye, in_X)
+    out_1_aug.narrow(1, sym_len_Ys, in_Y).copy_(out_1)
+
+    sym_patch = out_1[:, :sym_len_Ys, :]
+    inv_idx = torch.arange(sym_patch.size(1) - 1, -1, -1).long()
+    sym_patch_inv = sym_patch.index_select(1, inv_idx)
+    out_1_aug.narrow(1, 0, sym_len_Ys).copy_(sym_patch_inv)
+
+    sym_patch = out_1[:, -sym_len_Ye:, :]
+    inv_idx = torch.arange(sym_patch.size(1) - 1, -1, -1).long()
+    sym_patch_inv = sym_patch.index_select(1, inv_idx)
+    out_1_aug.narrow(1, sym_len_Ys + in_Y, sym_len_Ye).copy_(sym_patch_inv)
+
+    out_2 = torch.FloatTensor(out_Z, out_Y, in_X)
+    kernel_width = weights_Y.size(1)
+    for i in range(out_Y):
+        idx = int(indices_Y[i][0])
+        for j in range(in_X):
+            out_2[:, i, j] = out_1_aug[:, idx:idx + kernel_width, j].mv(weights_Y[i])
+        # out_2[:, i, 0] = out_1_aug[:, idx:idx + kernel_width, 0].mv(weights_Y[i])
+        # out_2[:, i, 1] = out_1_aug[:, idx:idx + kernel_width, 1].mv(weights_Y[i])
+        # out_2[:, i, 2] = out_1_aug[:, idx:idx + kernel_width, 2].mv(weights_Y[i])
+
+    # process Z dimension
+    out_2_aug = torch.FloatTensor(out_Z, out_Y, in_X + sym_len_Xs + sym_len_Xe)
+    out_2_aug.narrow(2, sym_len_Xs, in_X).copy_(out_2)
+
+    sym_patch = out_2[:, :, :sym_len_Xs]
+    inv_idx = torch.arange(sym_patch.size(2) - 1, -1, -1).long()
+    sym_patch_inv = sym_patch.index_select(2, inv_idx)
+    out_2_aug.narrow(2, 0, sym_len_Xs).copy_(sym_patch_inv)
+
+    sym_patch = out_2[:, :, -sym_len_Xe:]
+    inv_idx = torch.arange(sym_patch.size(2) - 1, -1, -1).long()
+    sym_patch_inv = sym_patch.index_select(2, inv_idx)
+    out_2_aug.narrow(2, sym_len_Xs + in_X, sym_len_Xe).copy_(sym_patch_inv)
+
+    out_3 = torch.FloatTensor(out_Z, out_Y, out_X)
+    kernel_width = weights_X.size(1)
+    for i in range(out_X):
+        idx = int(indices_X[i][0])
+        for j in range(out_Y):
+            out_3[:, j, i] = out_2_aug[:, j, idx:idx + kernel_width].mv(weights_X[i])
+
+    return out_3.numpy()
+
+
 if __name__ == '__main__':
     # test imresize function
     # read images
+    '''
     img = cv2.imread('test.png')
+    print(img)
     img = img * 1.0 / 255
     img = torch.from_numpy(np.transpose(img[:, :, [2, 1, 0]], (2, 0, 1))).float()
     # imresize
     scale = 1 / 4
     import time
+
     total_time = 0
     for i in range(10):
         start_time = time.time()
@@ -466,5 +659,42 @@ if __name__ == '__main__':
     print('average time: {}'.format(total_time / 10))
 
     import torchvision.utils
+
     torchvision.utils.save_image((rlt * 255).round() / 255, 'rlt.png', nrow=1, padding=0,
                                  normalize=False)
+    '''
+
+    # test imresize3_np
+    dir = sys.path[0]
+    generator = get_TensorGenerator(dir + '/test.vti')
+    vti_GT = generator.get_numpy_array()
+    print(vti_GT.shape)
+
+    scale = 1 / 2
+
+    rlt = imresize3_np(vti_GT, scale, antialiasing=True)
+
+    print(rlt.shape)
+    print(rlt.size)
+    data_rlt = np.reshape(rlt, rlt.size)
+    rlt = rlt.transpose((2, 1, 0))
+    print(rlt.shape)
+
+    grid = vtk.vtkImageData()
+    grid.SetOrigin([math.ceil(x * scale) for x in list(generator.get_Origin())])
+    grid.SetSpacing(generator.get_Spacing())
+    grid.SetDimensions([(x + 1) for x in list(rlt.shape)])
+    data = vtk.vtkFloatArray()
+    data.SetNumberOfComponents(1)
+    data.SetNumberOfTuples(grid.GetNumberOfCells())
+    for i in range(grid.GetNumberOfCells()):
+        data.SetValue(i, data_rlt[i])
+
+    grid.GetCellData().AddArray(data)
+    print(grid.GetCellData().GetNumberOfArrays())
+    data.SetName("TL")
+
+    writer = vtk.vtkXMLImageDataWriter()
+    writer.SetFileName("rlt.vti")
+    writer.SetInputData(grid)
+    writer.Write()

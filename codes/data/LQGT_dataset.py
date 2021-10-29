@@ -4,7 +4,9 @@ import cv2
 import lmdb
 import torch
 import torch.utils.data as data
-import data.util as util
+import logging
+
+from . import util
 
 
 class LQGTDataset(data.Dataset):
@@ -13,6 +15,7 @@ class LQGTDataset(data.Dataset):
     If only GT image is provided, generate LQ image on-the-fly.
     The pair is ensured by 'sorted' function, so please check the name convention.
     '''
+    logger = logging.getLogger('base')
 
     def __init__(self, opt):
         super(LQGTDataset, self).__init__()
@@ -40,6 +43,8 @@ class LQGTDataset(data.Dataset):
                                 meminit=False)
 
     def __getitem__(self, index):
+        self.logger.info("Check Point 1.1")
+        cv2.setNumThreads(0)
         if self.data_type == 'lmdb':
             if (self.GT_env is None) or (self.LQ_env is None):
                 self._init_lmdb()
@@ -61,6 +66,8 @@ class LQGTDataset(data.Dataset):
         if self.opt['color']:
             img_GT = util.channel_convert(img_GT.shape[2], self.opt['color'], [img_GT])[0]
 
+        self.logger.info("Check Point 1.2")
+        
         # get LQ image
         if self.paths_LQ:
             LQ_path = self.paths_LQ[index]
@@ -86,6 +93,8 @@ class LQGTDataset(data.Dataset):
                 # force to 3 channels
                 if img_GT.ndim == 2:
                     img_GT = cv2.cvtColor(img_GT, cv2.COLOR_GRAY2BGR)
+            
+            self.logger.info("Check Point 1.3")
 
             H, W, _ = img_GT.shape
             # using matlab imresize
@@ -123,12 +132,16 @@ class LQGTDataset(data.Dataset):
             img_LQ = util.channel_convert(C, self.opt['color'],
                                           [img_LQ])[0]  # TODO during val no definition
 
+        self.logger.info("Check Point 1.4")
+
         # BGR to RGB, HWC to CHW, numpy to tensor
         if img_GT.shape[2] == 3:
             img_GT = img_GT[:, :, [2, 1, 0]]
             img_LQ = img_LQ[:, :, [2, 1, 0]]
         img_GT = torch.from_numpy(np.ascontiguousarray(np.transpose(img_GT, (2, 0, 1)))).float()
         img_LQ = torch.from_numpy(np.ascontiguousarray(np.transpose(img_LQ, (2, 0, 1)))).float()
+
+        self.logger.info("Check Point 1.5")
 
         if LQ_path is None:
             LQ_path = GT_path

@@ -21,16 +21,18 @@ def create_dataloader(dataset, dataset_opt, opt=None, sampler=None):
                                            num_workers=num_workers, sampler=sampler, drop_last=True,
                                            pin_memory=False)
     else:
-        return torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1,
+        return torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0,
                                            pin_memory=True)
 
 
 def create_dataset(dataset_opt):
     mode = dataset_opt['mode']
     if mode == 'LQ':
-        from data.LQ_dataset import LQDataset as D
+        from .LQ_dataset import LQDataset as D
     elif mode == 'LQGT':
-        from data.LQGT_dataset import LQGTDataset as D
+        from .LQGT_dataset import LQGTDataset as D
+    elif mode == 'LQGT3D':
+        from .LQGT_dataset_3d import LQGTDataset3D as D
     # elif mode == 'LQGTseg_bg':
     #     from data.LQGT_seg_bg_dataset import LQGTSeg_BG_Dataset as D
     else:

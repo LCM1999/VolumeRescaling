@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import models.modules.module_util as mutil
 
+
 class DenseBlock(nn.Module):
     def __init__(self, channel_in, channel_out, init='xavier', gc=32, bias=True):
         super(DenseBlock, self).__init__()

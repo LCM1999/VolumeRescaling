@@ -1,5 +1,4 @@
 import vtk
-import itk
 import torch
 import numpy as np
 from vtk.util.numpy_support import vtk_to_numpy as vtk2np
@@ -62,7 +61,7 @@ class TensorGenerator:
 
         return reader
 
-    def get_numpy_array(self, arrId) -> np.ndarray:
+    def get_numpy_array(self) -> np.ndarray:
         if self.data is None:
             ex = Exception("Error: Data haven't been updated")
             raise ex
@@ -82,14 +81,27 @@ class TensorGenerator:
         '''
         IJKInArray = self.IJK
         IJKInArray.reverse()
+
         # the 3d matrix, will be transform to tensor later
         # tensor = np.ndarray(shape=[cells.GetNumberOfArrays()] + IJKInArray)
-        tensor = np.ndarray(IJKInArray)
-
+        ''''''
+        components = 0
+        for i in range(cells.GetNumberOfArrays()):
+            components += cells.GetArray(i).GetNumberOfComponents()
+        tensor = np.ndarray([components] + IJKInArray)
+        ''''''
+        """
         if arrId < 0 or arrId >= cells.GetNumberOfArrays():
             ex = Exception("Error: ArrIndex out of bound.")
             raise ex
+        """
+        for arrId in range(cells.GetNumberOfArrays()):
+            cdata = cells.GetArray(arrId)
+            for components in range(1, cdata.GetNumberOfComponents()):
+                tensor[cdata + components - 1] = vtk2np(cdata).reshape(IJKInArray)
 
+        return tensor
+        """
         cdata = cells.GetArray(arrId)
         array_type = cells.GetAttributeTypeAsString(arrId)
         if array_type == 'Scalars':
@@ -104,24 +116,7 @@ class TensorGenerator:
             raise ex
 
         return tensor
-
-        '''
-        for i in range(0, cells.GetNumberOfArrays()):
-            cdata = cells.GetArray(i)
-            array_type = cells.GetAttributeTypeAsString(i)
-            if array_type == 'Scalars':
-                tensor[i] = vtk2np(cdata).reshape(IJKInArray)
-            elif array_type == 'Vectors':
-                tensor[i] = np.linalg.norm(
-                    x=vtk2np(cdata).astype('float64'),
-                    ord=2, axis=1, keepdims=False,
-                ).astype('float32').reshape(IJKInArray)
-            else:
-                ex = Exception("Error: Unsupported array type")
-                raise ex
-
-        return tensor
-        '''
+        """
 
     def generate_tensor(self):
         tensor = self.get_numpy_array()
