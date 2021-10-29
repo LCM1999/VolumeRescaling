@@ -1,5 +1,6 @@
 # folder
 .vscode
+.idea
 
 dataset1/
 experiments/*
