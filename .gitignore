@@ -1,6 +1,7 @@
 # folder
 .vscode
 
+dataset1/
 experiments/*
 !experiments/pretrained_models
 experiments/pretrained_models/*
@@ -17,6 +18,8 @@ tb_logger/*
 *.caffemodel
 *.mat
 *.npy
+*.vti
+*.png
 
 # latex
 *.aux
