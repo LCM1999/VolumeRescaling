@@ -18,8 +18,6 @@ class TensorGenerator:
 
     def set_path(self, path: str):
         self.PATH = path
-        self.GENERATE_START = False
-        self.GENERATE_END = False
 
     def update(self):
         if len(self.PATH) == 0:
@@ -27,10 +25,13 @@ class TensorGenerator:
             raise ex
 
         self.reader = self._vtk_reader()
+        self.data = self.reader.GetOutput()
+        self.GLOBAL_BOUNDS = self.data.GetBounds()
+        self.EXTENT = self.data.GetExtent()
+        self.CELLS_NUM = self.data.GetNumberOfCells()
         self.GLOBAL_XYZ = [0] * 3
         self.IJK = [0] * 3
-        self.IS_UNIFORM_GRID = False
-        self.data = self.reader.GetOutput()
+        self.IS_UNIFORM_GRID = self._is_uniform_grid()
 
     def _calculate_global_cells(self):
         self.GLOBAL_XYZ[0] = round(self.GLOBAL_BOUNDS[1]) - round(self.GLOBAL_BOUNDS[0])
@@ -61,53 +62,60 @@ class TensorGenerator:
 
         return reader
 
-    def get_numpy_array(self) -> np.ndarray:
+    def get_numpy_array(self, id:int) -> (np.ndarray, int):
+        if not (0 <= id < self.data.GetCellData().GetNumberOfArrays()):
+            ex = Exception("Error: ArrIndex out of bound.")
+            raise ex
+
+        IJKInArray = self.IJK
+        IJKInArray.reverse()
+
+        cdata = self.data.GetCellData().GetArray(id)
+        tuples = cdata.GetNumberOfComponents()
+        array = vtk2np(cdata).reshape(IJKInArray)
+        return array, tuples
+
+    def get_numpy_arrays(self) -> np.ndarray:
         if self.data is None:
             ex = Exception("Error: Data haven't been updated")
             raise ex
-
-        self.GLOBAL_BOUNDS = self.data.GetBounds()
-        self.EXTENT = self.data.GetExtent()
-        self.CELLS_NUM = self.data.GetNumberOfCells()
-        self.IS_UNIFORM_GRID = self._is_uniform_grid()
 
         if self.IS_UNIFORM_GRID is not True:
             ex = Exception("Error: Dataset is not uniform grid")
             raise ex
 
-        cells = self.data.GetCellData()
         '''
         Origin IJK is XYZ order, but in array, IJK should in ZYX order
         '''
         IJKInArray = self.IJK
         IJKInArray.reverse()
 
-        # the 3d matrix, will be transform to tensor later
-        # tensor = np.ndarray(shape=[cells.GetNumberOfArrays()] + IJKInArray)
+        # the 3d matrix, will be transform to arrays later
+        # arrays = np.ndarray(shape=[cells.GetNumberOfArrays()] + IJKInArray)
         ''''''
         components = 0
-        for i in range(cells.GetNumberOfArrays()):
-            components += cells.GetArray(i).GetNumberOfComponents()
-        tensor = np.ndarray([components] + IJKInArray)
+        for i in range(self.data.GetCellData().GetNumberOfArrays()):
+            components += self.data.GetCellData().GetArray(i).GetNumberOfComponents()
+        arrays = np.ndarray([components] + IJKInArray)
         ''''''
         """
         if arrId < 0 or arrId >= cells.GetNumberOfArrays():
             ex = Exception("Error: ArrIndex out of bound.")
             raise ex
         """
-        for arrId in range(cells.GetNumberOfArrays()):
-            cdata = cells.GetArray(arrId)
+        for arrId in range(self.data.GetCellData().GetNumberOfArrays()):
+            cdata = self.data.GetCellData().GetArray(arrId)
             for components in range(1, cdata.GetNumberOfComponents()):
-                tensor[cdata + components - 1] = vtk2np(cdata).reshape(IJKInArray)
+                arrays[cdata + components - 1] = vtk2np(cdata).reshape(IJKInArray)
 
-        return tensor
+        return arrays
         """
         cdata = cells.GetArray(arrId)
         array_type = cells.GetAttributeTypeAsString(arrId)
         if array_type == 'Scalars':
-            tensor = vtk2np(cdata).reshape(IJKInArray)
+            arrays = vtk2np(cdata).reshape(IJKInArray)
         elif array_type == 'Vectors':
-            tensor = np.linalg.norm(
+            arrays = np.linalg.norm(
                 x=vtk2np(cdata).astype('float64'),
                 ord=2, axis=1, keepdims=False,
             ).astype('float32').reshape(IJKInArray)
@@ -115,20 +123,20 @@ class TensorGenerator:
             ex = Exception("Error: Unsupported array type")
             raise ex
 
-        return tensor
+        return arrays
         """
 
     def generate_tensor(self):
-        tensor = self.get_numpy_array()
+        tensor = self.get_numpy_arrays()
         t = torch.from_numpy(tensor)
 
         return t
 
-    def get_Origin(self):
+    def getOrigin(self):
         return self.data.GetOrigin()
 
-    def get_Spacing(self):
+    def getSpacing(self):
         return self.data.GetSpacing()
 
-    def get_Dimensions(self):
+    def getDimensions(self):
         return self.data.GetDimensions()

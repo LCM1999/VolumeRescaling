@@ -36,18 +36,19 @@ class LQGTDataset3D(data.Dataset):
         GT_path, LQ_path = None, None
         scale = self.opt['scale']
         GT_size = self.opt['GT_size']
+        attri_id = int(self.opt['attri_id'])
 
         # get GT image
         GT_path = self.paths_GT[index]
-        vti_GT_generator = util.get_TensorGenerator(GT_path)
-        vti_GT = vti_GT_generator.get_numpy_array()
+        vti_GT_generator = util.getTensorGenerator(GT_path)
+        vti_GT, component_GT = vti_GT_generator.get_numpy_array(attri_id)
         if self.opt['phase'] != 'train':
             vti_GT = util.modcrop_3d(vti_GT, scale)
 
         if self.paths_LQ:
             LQ_path = self.paths_LQ[index]
-            vti_LQ_generator = util.get_TensorGenerator(LQ_path)
-            vti_LQ = vti_LQ_generator.get_numpy_array()
+            vti_LQ_generator = util.getTensorGenerator(LQ_path)
+            vti_LQ, component_LQ = vti_LQ_generator.get_numpy_array(attri_id)
         else:
             if self.opt['phase'] == 'train':
                 # random_scale = random.choice(self.random_scale_list)
@@ -63,7 +64,6 @@ class LQGTDataset3D(data.Dataset):
                 # X_s = _mod(X_s, random_scale, scale, GT_size)
                 vti_GT = util.resize_3d(arr=np.copy(vti_GT), newsize=GT_size)
 
-            Z, Y, X = vti_GT.shape
             # using matlab imresize3
             vti_LQ = util.imresize3_np(vti_GT, 1 / scale, True)
             if vti_LQ.ndim != 3:
