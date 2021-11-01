@@ -11,6 +11,7 @@ datasets:
   test_1:  # the 1st test dataset
     name: testset
     mode: LQGT3D
+    type: vtk
     dataroot_GT: E:/Invertible-Image-Rescaling/dataset1_GT/ # path to test HR images
     dataroot_LQ: ~ # path to test reference LR images, not necessary, if not provided, LR images will be generated in dataloader
 #  test_2:  # the 2st test dataset

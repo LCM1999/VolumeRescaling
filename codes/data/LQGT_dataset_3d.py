@@ -21,8 +21,16 @@ class LQGTDataset3D(data.Dataset):
         self.opt = opt
         self.paths_LQ, self.paths_GT = None, None
 
-        self.paths_GT = util.get_vti_paths(opt['dataroot_GT'])
-        self.paths_LQ = util.get_vti_paths(opt['dataroot_LQ'])
+        if opt['type'] == 'vtk':
+            self.paths_GT = util.get_vtk_paths(opt['dataroot_GT'])
+            self.paths_LQ = util.get_vtk_paths(opt['dataroot_LQ'])
+        elif opt['type'] == 'tecplot':
+            self.paths_GT = util.get_tecplot_paths(opt['dataroot_GT'])
+            self.paths_LQ = util.get_tecplot_paths(opt['dataroot_LQ'])
+        else:
+            ex = Exception("Type '%s' is not supported" % opt['type'])
+            raise ex
+
         assert self.paths_GT, 'Error: GT path is empty.'
         if self.paths_LQ and self.paths_GT:
             assert len(self.paths_LQ) == len(

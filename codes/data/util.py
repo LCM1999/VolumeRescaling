@@ -13,6 +13,7 @@ import SimpleITK as sitk
 
 from tensor_generator import TensorGenerator
 from tensor_writer import TensorWriter
+
 ####################
 # Files & IO
 ####################
@@ -23,6 +24,8 @@ IMG_EXTENSIONS = ['.jpg', '.JPG', '.jpeg', '.JPEG', '.png', '.PNG', '.ppm', '.PP
 
 VTK_EXTENSIONS = ['.vti', '.VTI']
 
+Tecplot_EXTENSIONS = ['.dat', '.DAT']
+
 
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
@@ -30,6 +33,10 @@ def is_image_file(filename):
 
 def is_vtk_file(filename):
     return any(filename.endswith(extension) for extension in VTK_EXTENSIONS)
+
+
+def is_tecplot_file(filename):
+    return any(filename.endswith(extension) for extension in Tecplot_EXTENSIONS)
 
 
 def _get_paths_from_images(path):
@@ -45,16 +52,28 @@ def _get_paths_from_images(path):
     return images
 
 
-def _get_paths_from_vti(path):
+def _get_paths_from_vtks(path):
     assert os.path.isdir(path), '{:s} is not a valid directory'.format(path)
-    vtis = []
+    vtks = []
     for dirpath, _, fnames in sorted(os.walk(path)):
         for fname in sorted(fnames):
             if is_vtk_file(fname):
                 vti_path = os.path.join(dirpath, fname)
-                vtis.append(vti_path)
-    assert vtis, '{:s} has no valid vti file'.format(path)
-    return vtis
+                vtks.append(vti_path)
+    assert vtks, '{:s} has no valid vtk file'.format(path)
+    return vtks
+
+
+def _get_paths_from_tecplots(path):
+    assert os.path.isdir(path), '{:s} is not a valid directory'.format(path)
+    tecplots = []
+    for dirpath, _, fnames in sorted(os.walk(path)):
+        for fname in sorted(fnames):
+            if is_vtk_file(fname):
+                tecplot_path = os.path.join(dirpath, fname)
+                tecplots.append(tecplot_path)
+    assert tecplots, '{:s} has no valid tecplot file'.format(path)
+    return tecplots
 
 
 def _get_paths_from_lmdb(dataroot):
@@ -81,11 +100,19 @@ def get_image_paths(data_type, dataroot):
     return paths, sizes
 
 
-def get_vti_paths(dataroot):
-    '''get vti files' paths list'''
+def get_vtk_paths(dataroot):
+    '''get vti files path list'''
     paths = None
     if dataroot is not None:
-        paths = sorted(_get_paths_from_vti(dataroot))
+        paths = sorted(_get_paths_from_vtks(dataroot))
+    return paths
+
+
+def get_tecplot_paths(dataroot):
+    '''get tecplot files path list'''
+    paths = None
+    if dataroot is not None:
+        paths = sorted(_get_paths_from_tecplots(dataroot))
     return paths
 
 
@@ -123,10 +150,10 @@ def getTensorGenerator(path):
     read vti by vtk's reader
     return tensor of volume dataset
     '''
-    generator = TensorGenerator()
-    generator.set_path(path)
-    generator.update()
-    return generator
+    g = TensorGenerator()
+    g.set_path(path)
+    g.update()
+    return g
 
 
 ####################
@@ -676,7 +703,7 @@ if __name__ == '__main__':
 
     shape = list(rlt.shape)
     shape.reverse()
-    
+
     print(shape)
 
     writer = TensorWriter(

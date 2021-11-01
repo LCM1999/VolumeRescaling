@@ -1,6 +1,7 @@
 import vtk
 import torch
 import numpy as np
+
 from vtk.util.numpy_support import vtk_to_numpy as vtk2np
 
 
@@ -51,6 +52,8 @@ class TensorGenerator:
     def _vtk_reader(self):
         if self.PATH.endswith('.vti'):
             reader = vtk.vtkXMLImageDataReader()
+        elif self.PATH.endswith('.dat'):
+            reader = vtk.vtkTecplotReader()
         else:
             ex = Exception("Error: Unsupported format")
             raise ex
