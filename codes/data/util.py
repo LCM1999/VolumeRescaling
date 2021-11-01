@@ -11,7 +11,8 @@ import vtk
 import itk
 import SimpleITK as sitk
 
-from .tensor_generator import TensorGenerator
+from tensor_generator import TensorGenerator
+from tensor_writer import TensorWriter
 
 ####################
 # Files & IO
@@ -23,6 +24,8 @@ IMG_EXTENSIONS = ['.jpg', '.JPG', '.jpeg', '.JPEG', '.png', '.PNG', '.ppm', '.PP
 
 VTK_EXTENSIONS = ['.vti', '.VTI']
 
+Tecplot_EXTENSIONS = ['.dat', '.DAT']
+
 
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
@@ -30,6 +33,10 @@ def is_image_file(filename):
 
 def is_vtk_file(filename):
     return any(filename.endswith(extension) for extension in VTK_EXTENSIONS)
+
+
+def is_tecplot_file(filename):
+    return any(filename.endswith(extension) for extension in Tecplot_EXTENSIONS)
 
 
 def _get_paths_from_images(path):
@@ -45,16 +52,28 @@ def _get_paths_from_images(path):
     return images
 
 
-def _get_paths_from_vti(path):
+def _get_paths_from_vtks(path):
     assert os.path.isdir(path), '{:s} is not a valid directory'.format(path)
-    vtis = []
+    vtks = []
     for dirpath, _, fnames in sorted(os.walk(path)):
         for fname in sorted(fnames):
             if is_vtk_file(fname):
                 vti_path = os.path.join(dirpath, fname)
-                vtis.append(vti_path)
-    assert vtis, '{:s} has no valid vti file'.format(path)
-    return vtis
+                vtks.append(vti_path)
+    assert vtks, '{:s} has no valid vtk file'.format(path)
+    return vtks
+
+
+def _get_paths_from_tecplots(path):
+    assert os.path.isdir(path), '{:s} is not a valid directory'.format(path)
+    tecplots = []
+    for dirpath, _, fnames in sorted(os.walk(path)):
+        for fname in sorted(fnames):
+            if is_vtk_file(fname):
+                tecplot_path = os.path.join(dirpath, fname)
+                tecplots.append(tecplot_path)
+    assert tecplots, '{:s} has no valid tecplot file'.format(path)
+    return tecplots
 
 
 def _get_paths_from_lmdb(dataroot):
@@ -81,11 +100,19 @@ def get_image_paths(data_type, dataroot):
     return paths, sizes
 
 
-def get_vti_paths(dataroot):
-    '''get vti files' paths list'''
+def get_vtk_paths(dataroot):
+    '''get vti files path list'''
     paths = None
     if dataroot is not None:
-        paths = sorted(_get_paths_from_vti(dataroot))
+        paths = sorted(_get_paths_from_vtks(dataroot))
+    return paths
+
+
+def get_tecplot_paths(dataroot):
+    '''get tecplot files path list'''
+    paths = None
+    if dataroot is not None:
+        paths = sorted(_get_paths_from_tecplots(dataroot))
     return paths
 
 
@@ -118,15 +145,15 @@ def read_img(env, path, size=None):
     return img
 
 
-def get_TensorGenerator(path):
+def getTensorGenerator(path):
     '''
     read vti by vtk's reader
     return tensor of volume dataset
     '''
-    generator = TensorGenerator()
-    generator.set_path(path)
-    generator.update()
-    return generator
+    g = TensorGenerator()
+    g.set_path(path)
+    g.update()
+    return g
 
 
 ####################
@@ -666,35 +693,24 @@ if __name__ == '__main__':
 
     # test imresize3_np
     dir = sys.path[0]
-    generator = get_TensorGenerator(dir + '/test.vti')
-    vti_GT = generator.get_numpy_array()
+    generator = getTensorGenerator(dir + '/test.vti')
+    vti_GT, component = generator.get_numpy_array(0)
     print(vti_GT.shape)
 
     scale = 1 / 2
 
     rlt = imresize3_np(vti_GT, scale, antialiasing=True)
 
-    print(rlt.shape)
-    print(rlt.size)
-    data_rlt = np.reshape(rlt, rlt.size)
-    rlt = rlt.transpose((2, 1, 0))
-    print(rlt.shape)
+    shape = list(rlt.shape)
+    shape.reverse()
 
-    grid = vtk.vtkImageData()
-    grid.SetOrigin([math.ceil(x * scale) for x in list(generator.get_Origin())])
-    grid.SetSpacing(generator.get_Spacing())
-    grid.SetDimensions([(x + 1) for x in list(rlt.shape)])
-    data = vtk.vtkFloatArray()
-    data.SetNumberOfComponents(1)
-    data.SetNumberOfTuples(grid.GetNumberOfCells())
-    for i in range(grid.GetNumberOfCells()):
-        data.SetValue(i, data_rlt[i])
+    print(shape)
 
-    grid.GetCellData().AddArray(data)
-    print(grid.GetCellData().GetNumberOfArrays())
-    data.SetName("TL")
-
-    writer = vtk.vtkXMLImageDataWriter()
-    writer.SetFileName("rlt.vti")
-    writer.SetInputData(grid)
-    writer.Write()
+    writer = TensorWriter(
+        filename="rlt",
+        spacing=generator.getSpacing(),
+        origin=generator.getOrigin(),
+        dimensions=[(x + 1) for x in shape],
+    )
+    writer.append_data(data=rlt, name="TL", components=component)
+    writer.write()
