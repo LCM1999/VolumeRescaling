@@ -95,7 +95,7 @@ class IRNModel(BaseModel):
 
     def loss_backward(self, x, y):
         x_samples = self.netG(x=y, rev=True)
-        x_samples_image = x_samples[:, :3, :, :]
+        x_samples_image = x_samples#[:, :3, :, :, :]
         l_back_rec = self.train_opt['lambda_rec_back'] * self.Reconstruction_back(x, x_samples_image)
 
         return l_back_rec
@@ -108,13 +108,13 @@ class IRNModel(BaseModel):
         self.input = self.real_H
         self.output = self.netG(x=self.input)
 
-        zshape = self.output[:, 3:, :, :].shape
+        zshape = self.output[:, 3:, :, :, :].shape
         LR_ref = self.ref_L.detach()
 
-        l_forw_fit, l_forw_ce = self.loss_forward(self.output[:, :3, :, :], LR_ref, self.output[:, 3:, :, :])
+        l_forw_fit, l_forw_ce = self.loss_forward(self.output[:, :3, :, :, :], LR_ref, self.output[:, 3:, :, :, :])
 
         # backward upscaling
-        LR = self.Quantization(self.output[:, :3, :, :])
+        LR = self.Quantization(self.output[:, :3, :, :, :])
         gaussian_scale = self.train_opt['gaussian_scale'] if self.train_opt['gaussian_scale'] != None else 1
         y_ = torch.cat((LR, gaussian_scale * self.gaussian_batch(zshape)), dim=1)
 
@@ -141,7 +141,7 @@ class IRNModel(BaseModel):
         input_dim = Lshape[1]
         self.input = self.real_H
 
-        zshape = [Lshape[0], input_dim * (self.opt['scale']**2) - Lshape[1], Lshape[2], Lshape[3]]
+        zshape = [Lshape[0], input_dim * (self.opt['scale']**2) - Lshape[1], Lshape[2], Lshape[3], Lshape[4]]
 
         gaussian_scale = 1
         if self.test_opt and self.test_opt['gaussian_scale'] != None:
@@ -149,17 +149,17 @@ class IRNModel(BaseModel):
 
         self.netG.eval()
         with torch.no_grad():
-            self.forw_L = self.netG(x=self.input)[:, :3, :, :]
+            self.forw_L = self.netG(x=self.input)[:, :3, :, :, :]
             self.forw_L = self.Quantization(self.forw_L)
             y_forw = torch.cat((self.forw_L, gaussian_scale * self.gaussian_batch(zshape)), dim=1)
-            self.fake_H = self.netG(x=y_forw, rev=True)[:, :3, :, :]
+            self.fake_H = self.netG(x=y_forw, rev=True)[:, :3, :, :, :]
 
         self.netG.train()
 
     def downscale(self, HR_img):
         self.netG.eval()
         with torch.no_grad():
-            LR_img = self.netG(x=HR_img)[:, :3, :, :]
+            LR_img = self.netG(x=HR_img)[:, :3, :, :, :]
             LR_img = self.Quantization(LR_img)
         self.netG.train()
 
@@ -167,12 +167,12 @@ class IRNModel(BaseModel):
 
     def upscale(self, LR_img, scale, gaussian_scale=1):
         Lshape = LR_img.shape
-        zshape = [Lshape[0], Lshape[1] * (scale**2 - 1), Lshape[2], Lshape[3]]
+        zshape = [Lshape[0], Lshape[1] * (scale**2 - 1), Lshape[2], Lshape[3], Lshape[4]]
         y_ = torch.cat((LR_img, gaussian_scale * self.gaussian_batch(zshape)), dim=1)
 
         self.netG.eval()
         with torch.no_grad():
-            HR_img = self.netG(x=y_, rev=True)[:, :3, :, :]
+            HR_img = self.netG(x=y_, rev=True)[:, :3, :, :, :]
         self.netG.train()
 
         return HR_img

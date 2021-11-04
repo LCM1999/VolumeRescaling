@@ -9,45 +9,39 @@ class TensorGenerator:
     def __init__(self):
         self.PATH = ""
         self.reader = None
-        self.GLOBAL_BOUNDS = None
-        self.GLOBAL_XYZ = [0] * 3
-        self.EXTENT = None
-        self.CELLS_NUM = None
         self.IJK = [0] * 3
-        self.IS_UNIFORM_GRID = False
         self.data = None
+        self.type = None
 
     def set_path(self, path: str):
         self.PATH = path
 
-    def update(self):
-        if len(self.PATH) == 0:
-            ex = Exception("Error: Path haven't been set")
-            raise ex
+    def set_type(self, type: str):
+        self.type = type
 
+    def update(self):
         self.reader = self._vtk_reader()
         self.data = self.reader.GetOutput()
-        self.GLOBAL_BOUNDS = self.data.GetBounds()
-        self.EXTENT = self.data.GetExtent()
-        self.CELLS_NUM = self.data.GetNumberOfCells()
-        self.GLOBAL_XYZ = [0] * 3
-        self.IJK = [0] * 3
-        self.IS_UNIFORM_GRID = self._is_uniform_grid()
-
-    def _calculate_global_cells(self):
-        self.GLOBAL_XYZ[0] = round(self.GLOBAL_BOUNDS[1]) - round(self.GLOBAL_BOUNDS[0])
-        self.GLOBAL_XYZ[1] = round(self.GLOBAL_BOUNDS[3]) - round(self.GLOBAL_BOUNDS[2])
-        self.GLOBAL_XYZ[2] = round(self.GLOBAL_BOUNDS[5]) - round(self.GLOBAL_BOUNDS[4])
-        return self.GLOBAL_XYZ[0] * self.GLOBAL_XYZ[1] * self.GLOBAL_XYZ[2]
-
-    def _is_uniform_grid(self):
-        if (self._calculate_global_cells() / self.data.GetMaxCellSize()) == self.CELLS_NUM:
-            self.IJK[0] = self.EXTENT[1] - self.EXTENT[0]
-            self.IJK[1] = self.EXTENT[3] - self.EXTENT[2]
-            self.IJK[2] = self.EXTENT[5] - self.EXTENT[4]
-            return True
+        if type(self.data) is vtk.vtkMultiBlockDataSet:
+            if self.data.GetBlock(0).GetPointData().GetNumberOfArrays() != 0:
+                p2c = vtk.vtkPointDataToCellData()
+                p2c.SetInputData(self.data.GetBlock(0))
+                p2c.SetProcessAllArrays(True)
+                p2c.PassPointDataOff()
+                p2c.Update()
+                self.data = p2c.GetOutput()
         else:
-            return False
+            if self.data.GetPointData().GetNumberOfArrays() != 0:
+                p2c = vtk.vtkPointDataToCellData()
+                p2c.SetInputData(self.data)
+                p2c.SetProcessAllArrays(True)
+                p2c.PassPointDataOff()
+                p2c.Update()
+                self.data = p2c.GetOutput()
+        EXTENT = self.data.GetExtent()
+        self.IJK[0] = EXTENT[1] - EXTENT[0]
+        self.IJK[1] = EXTENT[3] - EXTENT[2]
+        self.IJK[2] = EXTENT[5] - EXTENT[4]
 
     def _vtk_reader(self):
         if self.PATH.endswith('.vti'):
@@ -136,10 +130,20 @@ class TensorGenerator:
         return t
 
     def getOrigin(self):
-        return self.data.GetOrigin()
+        origin = [0.0] * 3
+        try:
+            origin = self.data.GetOrigin()
+        except Exception:
+            pass
+        return origin
 
     def getSpacing(self):
-        return self.data.GetSpacing()
+        spacing = [1.0] * 3
+        try:
+            spacing = self.data.GetSpacing()
+        except Exception:
+            pass
+        return spacing
 
     def getDimensions(self):
         return self.data.GetDimensions()

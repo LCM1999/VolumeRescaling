@@ -10,10 +10,10 @@ class ReconstructionLoss(nn.Module):
 
     def forward(self, x, target):
         if self.losstype == 'l2':
-            return torch.mean(torch.sum((x - target)**2, (1, 2, 3)))
+            return torch.mean(torch.sum((x - target)**2, (1, 2, 3, 4)))
         elif self.losstype == 'l1':
             diff = x - target
-            return torch.mean(torch.sum(torch.sqrt(diff * diff + self.eps), (1, 2, 3)))
+            return torch.mean(torch.sum(torch.sqrt(diff * diff + self.eps), (1, 2, 3, 4)))
         else:
             print("reconstruction loss type error!")
             return 0
