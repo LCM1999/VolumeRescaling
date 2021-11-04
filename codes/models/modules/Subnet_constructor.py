@@ -3,15 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import models.modules.module_util as mutil
 
-
 class DenseBlock(nn.Module):
     def __init__(self, channel_in, channel_out, init='xavier', gc=32, bias=True):
         super(DenseBlock, self).__init__()
-        self.conv1 = nn.Conv2d(channel_in, gc, 3, 1, 1, bias=bias)
-        self.conv2 = nn.Conv2d(channel_in + gc, gc, 3, 1, 1, bias=bias)
-        self.conv3 = nn.Conv2d(channel_in + 2 * gc, gc, 3, 1, 1, bias=bias)
-        self.conv4 = nn.Conv2d(channel_in + 3 * gc, gc, 3, 1, 1, bias=bias)
-        self.conv5 = nn.Conv2d(channel_in + 4 * gc, channel_out, 3, 1, 1, bias=bias)
+        self.conv1 = nn.Conv3d(channel_in, gc, 3, 1, 1, bias=bias)
+        self.conv2 = nn.Conv3d(channel_in + gc, gc, 3, 1, 1, bias=bias)
+        self.conv3 = nn.Conv3d(channel_in + 2 * gc, gc, 3, 1, 1, bias=bias)
+        self.conv4 = nn.Conv3d(channel_in + 3 * gc, gc, 3, 1, 1, bias=bias)
+        self.conv5 = nn.Conv3d(channel_in + 4 * gc, channel_out, 3, 1, 1, bias=bias)
         self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
         if init == 'xavier':

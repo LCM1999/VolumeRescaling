@@ -34,6 +34,7 @@ def main():
                         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
+    args.opt = 'options/train/train_IRN_x2_3d.yml'
     opt = option.parse(args.opt, is_train=True)
 
     #### distributed training settings
@@ -150,6 +151,7 @@ def main():
         if opt['dist']:
             train_sampler.set_epoch(epoch)
         for _, train_data in enumerate(train_loader):
+            print('training,train_data,GT,LQ',train_data['GT'].shape,train_data['LQ'].shape)
             current_step += 1
             if current_step > total_iters:
                 break
@@ -210,7 +212,7 @@ def main():
                         util.save_img(gt_img, save_img_path_gt)
                         save_img_path_gtl = os.path.join(img_dir, '{:s}_LR_ref_{:d}.png'.format(img_name, current_step))
                         util.save_img(gtl_img, save_img_path_gtl)
-
+#---------------------------此行以下未改-----------------------------------------------------------------------
                     # calculate PSNR
                     crop_size = opt['scale']
                     gt_img = gt_img / 255.

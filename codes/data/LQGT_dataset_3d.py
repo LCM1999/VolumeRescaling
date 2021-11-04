@@ -44,19 +44,21 @@ class LQGTDataset3D(data.Dataset):
         GT_path, LQ_path = None, None
         scale = self.opt['scale']
         GT_size = self.opt['GT_size']
-        attri_id = int(self.opt['attri_id'])
+        attr_id = self.opt['attr_id']
 
         # get GT image
         GT_path = self.paths_GT[index]
         vti_GT_generator = util.getTensorGenerator(GT_path)
-        vti_GT, component_GT = vti_GT_generator.get_numpy_array(attri_id)
+        vti_GT_generator.set_type(self.opt['type'])
+        vti_GT, component_GT = vti_GT_generator.get_numpy_array(attr_id)
         if self.opt['phase'] != 'train':
             vti_GT = util.modcrop_3d(vti_GT, scale)
 
         if self.paths_LQ:
             LQ_path = self.paths_LQ[index]
             vti_LQ_generator = util.getTensorGenerator(LQ_path)
-            vti_LQ, component_LQ = vti_LQ_generator.get_numpy_array(attri_id)
+            vti_LQ_generator.set_type(self.opt['type'])
+            vti_LQ, component_LQ = vti_LQ_generator.get_numpy_array(attr_id)
         else:
             if self.opt['phase'] == 'train':
                 # random_scale = random.choice(self.random_scale_list)

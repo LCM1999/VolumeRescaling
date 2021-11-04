@@ -11,8 +11,8 @@ import vtk
 import itk
 import SimpleITK as sitk
 
-from tensor_generator import TensorGenerator
-from tensor_writer import TensorWriter
+from .tensor_generator import TensorGenerator
+from .tensor_writer import TensorWriter
 
 ####################
 # Files & IO
@@ -69,7 +69,7 @@ def _get_paths_from_tecplots(path):
     tecplots = []
     for dirpath, _, fnames in sorted(os.walk(path)):
         for fname in sorted(fnames):
-            if is_vtk_file(fname):
+            if is_tecplot_file(fname):
                 tecplot_path = os.path.join(dirpath, fname)
                 tecplots.append(tecplot_path)
     assert tecplots, '{:s} has no valid tecplot file'.format(path)
@@ -337,32 +337,28 @@ def transform_to_ITK(arr):
         ex = Exception("Error: Data doesn't exist")
         raise ex
 
-    itkImage = itk.GetImageFromArray(arr=arr, is_vector=False)
+    itkImage = sitk.GetImageFromArray(arr=arr, isVector=False)
 
     return itkImage
 
 
 def resize_3d(arr, newsize, resamplemethod=sitk.sitkNearestNeighbor):
-    resampled = None
-    for i in range(len(arr)):
-        subarr = arr[i]
-        itkImage = transform_to_ITK(subarr)
-        resampler = sitk.ResampleImageFilter()
-        originSize = itkImage.GetSize()
-        originSpacing = itkImage.GetSpacing()
-        newSize = np.array(newsize, float)
-        factor = originSize / newSize
-        newSpacing = originSpacing * factor
-        newSize = newSize.astype(np.int)
-        resampler.SetReferenceImage(itkImage)
-        resampler.SetSize(newSize.tolist())
-        resampler.SetOutputSpacing(newSpacing.tolist())
-        resampler.SetTransform(sitk.Transform(3, sitk.sitkIdentity))
-        resampler.SetInterpolator(resamplemethod)
-        itkImgResampled = resampler.Execute(itkImage)
-        if resampled is None:
-            resampled = np.ndarray([len(arr)] + itkImgResampled.shape)
-        resampled[i] = itkImgResampled
+    subarr = arr
+    itkImage = transform_to_ITK(subarr)
+    resampler = sitk.ResampleImageFilter()
+    originSize = itkImage.GetSize()
+    originSpacing = itkImage.GetSpacing()
+    newSize = np.array(newsize, float)
+    factor = originSize / newSize
+    newSpacing = originSpacing * factor
+    newSize = newSize.astype(np.int)
+    resampler.SetReferenceImage(itkImage)
+    resampler.SetSize([int(newSize)] * 3)
+    resampler.SetOutputSpacing(newSpacing.tolist())
+    resampler.SetTransform(sitk.Transform(3, sitk.sitkIdentity))
+    resampler.SetInterpolator(resamplemethod)
+    itkImgResampled = resampler.Execute(itkImage)
+    resampled = sitk.GetArrayFromImage(itkImgResampled)
 
     return resampled
 

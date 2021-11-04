@@ -57,28 +57,33 @@ class HaarDownsampling(nn.Module):
         self.haar_weights[3, 0, 1, 0] = -1
         self.haar_weights[3, 0, 0, 1] = -1
 
+        #3D
+        weight0 = torch.stack([self.haar_weights, self.haar_weights], axis=2)
+        weight1 = torch.stack([self.haar_weights, -self.haar_weights], axis=2)
+        self.haar_weights = torch.cat([weight0, weight1], axis=0)
+
         self.haar_weights = torch.cat([self.haar_weights] * self.channel_in, 0)
         self.haar_weights = nn.Parameter(self.haar_weights)
         self.haar_weights.requires_grad = False
 
     def forward(self, x, rev=False):
         if not rev:
-            self.elements = x.shape[1] * x.shape[2] * x.shape[3]
-            self.last_jac = self.elements / 4 * np.log(1/16.)
+            self.elements = x.shape[1] * x.shape[2] * x.shape[3] * x.shape[4]
+            self.last_jac = self.elements / 4 * np.log(1/16.)  #暂未改动
 
-            out = F.conv2d(x, self.haar_weights, bias=None, stride=2, groups=self.channel_in) / 4.0
-            out = out.reshape([x.shape[0], self.channel_in, 4, x.shape[2] // 2, x.shape[3] // 2])
+            out = F.conv3d(x, self.haar_weights, bias=None, stride=2, groups=self.channel_in) / 8.0  #除以2还是8
+            out = out.reshape([x.shape[0], self.channel_in, 8, x.shape[2] // 2, x.shape[3] // 2, x.shape[4] // 2])
             out = torch.transpose(out, 1, 2)
-            out = out.reshape([x.shape[0], self.channel_in * 4, x.shape[2] // 2, x.shape[3] // 2])
+            out = out.reshape([x.shape[0], self.channel_in * 8, x.shape[2] // 2, x.shape[3] // 2, x.shape[4] // 2])
             return out
         else:
-            self.elements = x.shape[1] * x.shape[2] * x.shape[3]
-            self.last_jac = self.elements / 4 * np.log(16.)
+            self.elements = x.shape[1] * x.shape[2] * x.shape[3] * x.shape[4]
+            self.last_jac = self.elements / 4 * np.log(16.)  #暂未改动
 
-            out = x.reshape([x.shape[0], 4, self.channel_in, x.shape[2], x.shape[3]])
+            out = x.reshape([x.shape[0], 8, self.channel_in, x.shape[2], x.shape[3], x.shape[4]])
             out = torch.transpose(out, 1, 2)
-            out = out.reshape([x.shape[0], self.channel_in * 4, x.shape[2], x.shape[3]])
-            return F.conv_transpose2d(out, self.haar_weights, bias=None, stride=2, groups = self.channel_in)
+            out = out.reshape([x.shape[0], self.channel_in * 8, x.shape[2], x.shape[3], x.shape[4]])
+            return F.conv_transpose3d(out, self.haar_weights, bias=None, stride=2, groups = self.channel_in)
 
     def jacobian(self, x, rev=False):
         return self.last_jac
