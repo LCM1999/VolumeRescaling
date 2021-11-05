@@ -11,7 +11,6 @@ class InvBlockExp(nn.Module):
 
         self.split_len1 = channel_split_num
         self.split_len2 = channel_num - channel_split_num
-
         self.clamp = clamp
 
         self.F = subnet_constructor(self.split_len2, self.split_len1)
@@ -19,7 +18,9 @@ class InvBlockExp(nn.Module):
         self.H = subnet_constructor(self.split_len1, self.split_len2)
 
     def forward(self, x, rev=False):
+        # print('InvBlockExp,split_len1,split_len2', self.split_len1, self.split_len2)
         x1, x2 = (x.narrow(1, 0, self.split_len1), x.narrow(1, self.split_len1, self.split_len2))
+        # print('InvBlockExp,x1,x2', x1.shape, x2.shape)
 
         if not rev:
             y1 = x1 + self.F(x2)
@@ -75,6 +76,7 @@ class HaarDownsampling(nn.Module):
             out = out.reshape([x.shape[0], self.channel_in, 8, x.shape[2] // 2, x.shape[3] // 2, x.shape[4] // 2])
             out = torch.transpose(out, 1, 2)
             out = out.reshape([x.shape[0], self.channel_in * 8, x.shape[2] // 2, x.shape[3] // 2, x.shape[4] // 2])
+            # print('HaarDownsampling,out',out.shape)
             return out
         else:
             self.elements = x.shape[1] * x.shape[2] * x.shape[3] * x.shape[4]
@@ -99,7 +101,7 @@ class InvRescaleNet(nn.Module):
         for i in range(down_num):
             b = HaarDownsampling(current_channel)
             operations.append(b)
-            current_channel *= 4
+            current_channel *= 8
             for j in range(block_num[i]):
                 b = InvBlockExp(subnet_constructor, current_channel, channel_out)
                 operations.append(b)
@@ -113,11 +115,13 @@ class InvRescaleNet(nn.Module):
         if not rev:
             for op in self.operations:
                 out = op.forward(out, rev)
+                # print('InvRescaleNet',rev,out.shape)
                 if cal_jacobian:
                     jacobian += op.jacobian(out, rev)
         else:
             for op in reversed(self.operations):
                 out = op.forward(out, rev)
+                # print('InvRescaleNet',rev, out.shape)
                 if cal_jacobian:
                     jacobian += op.jacobian(out, rev)
 

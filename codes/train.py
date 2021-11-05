@@ -151,7 +151,7 @@ def main():
         if opt['dist']:
             train_sampler.set_epoch(epoch)
         for _, train_data in enumerate(train_loader):
-            print('training,train_data,GT,LQ',train_data['GT'].shape,train_data['LQ'].shape)
+            print('training,train_data,GT,LQ',_,train_data['GT'].shape,train_data['LQ'].shape)
             current_step += 1
             if current_step > total_iters:
                 break
@@ -178,9 +178,13 @@ def main():
 
             # validation
             if current_step % opt['train']['val_freq'] == 0 and rank <= 0:
+                print('validation')
                 avg_psnr = 0.0
                 idx = 0
+                # model.device = torch.device('cpu')
+                # model.netG.to(model.device)
                 for val_data in val_loader:
+                    print('validation,start')
                     idx += 1
                     img_name = os.path.splitext(os.path.basename(val_data['LQ_path'][0]))[0]
                     img_dir = os.path.join(opt['path']['val_images'], img_name)
@@ -212,16 +216,15 @@ def main():
                         util.save_img(gt_img, save_img_path_gt)
                         save_img_path_gtl = os.path.join(img_dir, '{:s}_LR_ref_{:d}.png'.format(img_name, current_step))
                         util.save_img(gtl_img, save_img_path_gtl)
-#---------------------------此行以下未改-----------------------------------------------------------------------
-                    # calculate PSNR
+                   # calculate PSNR
                     crop_size = opt['scale']
-                    gt_img = gt_img / 255.
-                    sr_img = sr_img / 255.
                     cropped_sr_img = sr_img[crop_size:-crop_size, crop_size:-crop_size, :]
                     cropped_gt_img = gt_img[crop_size:-crop_size, crop_size:-crop_size, :]
-                    avg_psnr += util.calculate_psnr(cropped_sr_img * 255, cropped_gt_img * 255)
+                    avg_psnr += util.calculate_psnr(cropped_sr_img , cropped_gt_img )
 
                 avg_psnr = avg_psnr / idx
+                # model.device = torch.device('cuda' if opt['gpu_ids'] is not None else 'cpu')
+                # model.netG.to(model.device)
 
                 # log
                 logger.info('# Validation # PSNR: {:.4e}.'.format(avg_psnr))

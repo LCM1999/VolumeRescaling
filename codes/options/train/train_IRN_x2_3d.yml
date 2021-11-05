@@ -17,13 +17,13 @@ datasets:
     mode: LQGT3D
     attr_id: 0
     type: tecplot
-    dataroot_GT: 'E:\TestData\eta_processed\' #'H:/CVcodes/3d-SR/data' # path to training HR images
+    dataroot_GT: 'H:/CVcodes/3d-SR/data/dat' #'H:/CVcodes/3d-SR/data' # path to training HR images
     dataroot_LQ: ~ # path to training reference LR images, not necessary, if not provided, LR images will be generated in dataloader
 
     use_shuffle: true
     n_workers: 4  # per GPU
-    batch_size: 1
-    GT_size: 144
+    batch_size: 2
+    GT_size: 36
     use_flip: true
     use_rot: true
     color: RGB
@@ -33,7 +33,7 @@ datasets:
     mode: LQGT3D
     attr_id: 0
     type: tecplot
-    dataroot_GT: 'E:\TestData\eta_processed\' # path to validation HR images
+    dataroot_GT: 'H:/CVcodes/3d-SR/data/dat' # path to validation HR images
     dataroot_LQ: ~ # path to validation reference LR images, not necessary, if not provided, LR images will be generated in dataloader
 
 

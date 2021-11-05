@@ -25,6 +25,8 @@ class IRNModel(BaseModel):
         self.train_opt = train_opt
         self.test_opt = test_opt
 
+        self.out_channel = opt['network_G']['out_nc']
+
         self.netG = networks.define_G(opt).to(self.device)
         if opt['dist']:
             self.netG = DistributedDataParallel(self.netG, device_ids=[torch.cuda.current_device()])
@@ -107,17 +109,22 @@ class IRNModel(BaseModel):
         # forward downscaling
         self.input = self.real_H
         self.output = self.netG(x=self.input)
+        # print('self.output,self.out_channel',self.output.shape,self.out_channel)
 
-        zshape = self.output[:, 3:, :, :, :].shape
+        zshape = self.output[:, self.out_channel:, :, :, :].shape
+        # print('zshape',zshape)
         LR_ref = self.ref_L.detach()
 
-        l_forw_fit, l_forw_ce = self.loss_forward(self.output[:, :3, :, :, :], LR_ref, self.output[:, 3:, :, :, :])
+        l_forw_fit, l_forw_ce = self.loss_forward(self.output[:, :self.out_channel, :, :, :], LR_ref, self.output[:, self.out_channel:, :, :, :])
 
         # backward upscaling
-        LR = self.Quantization(self.output[:, :3, :, :, :])
+        # LR = self.Quantization(self.output[:, :self.out_channel, :, :, :])
+        LR = self.output[:, :self.out_channel, :, :, :]
+        # print('LR,LR_ref',LR.shape,LR_ref.shape)
         gaussian_scale = self.train_opt['gaussian_scale'] if self.train_opt['gaussian_scale'] != None else 1
         y_ = torch.cat((LR, gaussian_scale * self.gaussian_batch(zshape)), dim=1)
 
+        # print('self.real_H, y_',self.real_H.shape, y_.shape)
         l_back_rec = self.loss_backward(self.real_H, y_)
 
         # total loss
@@ -149,17 +156,17 @@ class IRNModel(BaseModel):
 
         self.netG.eval()
         with torch.no_grad():
-            self.forw_L = self.netG(x=self.input)[:, :3, :, :, :]
+            self.forw_L = self.netG(x=self.input)[:, :self.out_channel, :, :, :]
             self.forw_L = self.Quantization(self.forw_L)
             y_forw = torch.cat((self.forw_L, gaussian_scale * self.gaussian_batch(zshape)), dim=1)
-            self.fake_H = self.netG(x=y_forw, rev=True)[:, :3, :, :, :]
+            self.fake_H = self.netG(x=y_forw, rev=True)[:, :self.out_channel, :, :, :]
 
         self.netG.train()
 
     def downscale(self, HR_img):
         self.netG.eval()
         with torch.no_grad():
-            LR_img = self.netG(x=HR_img)[:, :3, :, :, :]
+            LR_img = self.netG(x=HR_img)[:, :self.out_channel, :, :, :]
             LR_img = self.Quantization(LR_img)
         self.netG.train()
 
@@ -172,7 +179,7 @@ class IRNModel(BaseModel):
 
         self.netG.eval()
         with torch.no_grad():
-            HR_img = self.netG(x=y_, rev=True)[:, :3, :, :, :]
+            HR_img = self.netG(x=y_, rev=True)[:, :self.out_channel, :, :, :]
         self.netG.train()
 
         return HR_img

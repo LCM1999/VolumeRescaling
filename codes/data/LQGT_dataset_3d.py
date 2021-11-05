@@ -102,8 +102,9 @@ class LQGTDataset3D(data.Dataset):
             vti_GT = vti_GT[rnd_Z_GT: rnd_Z_GT + GT_size, rnd_Y_GT: rnd_Y_GT + GT_size, rnd_X_GT: rnd_X_GT + GT_size]
 
         # ZYX to XYZ
-        vti_GT = torch.from_numpy(np.ascontiguousarray(vti_GT)).float()
-        vti_LQ = torch.from_numpy(np.ascontiguousarray(vti_LQ)).float()
+        vti_GT = torch.from_numpy(np.ascontiguousarray(vti_GT)).float().unsqueeze(0)
+        vti_LQ = torch.from_numpy(np.ascontiguousarray(vti_LQ)).float().unsqueeze(0)
+
 
         if LQ_path is None:
             LQ_path = GT_path
