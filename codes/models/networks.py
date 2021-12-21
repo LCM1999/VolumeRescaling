@@ -1,15 +1,23 @@
 import torch
 import logging
-import models.modules.discriminator_vgg_arch as SRGAN_arch
-from models.modules.Inv_arch import *
-from models.modules.Subnet_constructor import subnet
+import codes.models.modules.discriminator_vgg_arch as SRGAN_arch
+from codes.models.modules.Inv_arch import *
+from codes.models.modules.Subnet_constructor import subnet
 import math
+
 logger = logging.getLogger('base')
 
 
 ####################
 # define network
 ####################
+def define_IDN(opt):
+    opt_net = opt['network_IDN']
+    netI = InvertibleDownsamplingNet(opt_net)
+
+    return netI
+
+
 def define_G(opt):
     opt_net = opt['network_G']
     which_model = opt_net['which_model_G']
@@ -26,7 +34,7 @@ def define_G(opt):
     return netG
 
 
-#### Discriminator
+# Discriminator
 def define_D(opt):
     opt_net = opt['network_D']
     which_model = opt_net['which_model_D']
@@ -38,7 +46,7 @@ def define_D(opt):
     return netD
 
 
-#### Define Network used for Perceptual Loss
+# Define Network used for Perceptual Loss
 def define_F(opt, use_bn=False):
     gpu_ids = opt['gpu_ids']
     device = torch.device('cuda' if gpu_ids else 'cpu')

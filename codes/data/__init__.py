@@ -33,6 +33,8 @@ def create_dataset(dataset_opt):
         from .LQGT_dataset import LQGTDataset as D
     elif mode == 'LQGT3D':
         from .LQGT_dataset_3d import LQGTDataset3D as D
+    elif mode == 'GT3D':
+        from .LQGT_dataset_3d import LQGTDataset3D as D
     # elif mode == 'LQGTseg_bg':
     #     from data.LQGT_seg_bg_dataset import LQGTSeg_BG_Dataset as D
     else:

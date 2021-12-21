@@ -4,13 +4,14 @@ from collections import OrderedDict
 import torch
 import torch.nn as nn
 from torch.nn.parallel import DataParallel, DistributedDataParallel
-import models.networks as networks
-import models.lr_scheduler as lr_scheduler
+import networks
+import lr_scheduler
 from .base_model import BaseModel
-from models.modules.loss import ReconstructionLoss
-from models.modules.Quantization import Quantization
+from modules.loss import ReconstructionLoss
+from modules.Quantization import Quantization
 
 logger = logging.getLogger('base')
+
 
 class IRNModel(BaseModel):
     def __init__(self, opt):
@@ -44,7 +45,6 @@ class IRNModel(BaseModel):
             # loss
             self.Reconstruction_forw = ReconstructionLoss(losstype=self.train_opt['pixel_criterion_forw'])
             self.Reconstruction_back = ReconstructionLoss(losstype=self.train_opt['pixel_criterion_back'])
-
 
             # optimizers
             wd_G = train_opt['weight_decay_G'] if train_opt['weight_decay_G'] else 0
@@ -81,7 +81,7 @@ class IRNModel(BaseModel):
             self.log_dict = OrderedDict()
 
     def feed_data(self, data):
-        self.ref_L = data['LQ'].to(self.device)  # LQ
+        # self.ref_L = data['LQ'].to(self.device)  # LQ
         self.real_H = data['GT'].to(self.device)  # GT
 
     def gaussian_batch(self, dims):
@@ -91,17 +91,16 @@ class IRNModel(BaseModel):
         l_forw_fit = self.train_opt['lambda_fit_forw'] * self.Reconstruction_forw(out, y)
 
         z = z.reshape([out.shape[0], -1])
-        l_forw_ce = self.train_opt['lambda_ce_forw'] * torch.sum(z**2) / z.shape[0]
+        l_forw_ce = self.train_opt['lambda_ce_forw'] * torch.sum(z ** 2) / z.shape[0]
 
         return l_forw_fit, l_forw_ce
 
     def loss_backward(self, x, y):
         x_samples = self.netG(x=y, rev=True)
-        x_samples_image = x_samples#[:, :3, :, :, :]
+        x_samples_image = x_samples  # [:, :3, :, :, :]
         l_back_rec = self.train_opt['lambda_rec_back'] * self.Reconstruction_back(x, x_samples_image)
 
         return l_back_rec
-
 
     def optimize_parameters(self, step):
         self.optimizer_G.zero_grad()
@@ -115,7 +114,8 @@ class IRNModel(BaseModel):
         # print('zshape',zshape)
         LR_ref = self.ref_L.detach()
 
-        l_forw_fit, l_forw_ce = self.loss_forward(self.output[:, :self.out_channel, :, :, :], LR_ref, self.output[:, self.out_channel:, :, :, :])
+        l_forw_fit, l_forw_ce = self.loss_forward(self.output[:, :self.out_channel, :, :, :], LR_ref,
+                                                  self.output[:, self.out_channel:, :, :, :])
 
         # backward upscaling
         # LR = self.Quantization(self.output[:, :self.out_channel, :, :, :])
@@ -148,7 +148,7 @@ class IRNModel(BaseModel):
         input_dim = Lshape[1]
         self.input = self.real_H
 
-        zshape = [Lshape[0], input_dim * (self.opt['scale']**2) - Lshape[1], Lshape[2], Lshape[3], Lshape[4]]
+        zshape = [Lshape[0], input_dim * (self.opt['scale'] ** 2) - Lshape[1], Lshape[2], Lshape[3], Lshape[4]]
 
         gaussian_scale = 1
         if self.test_opt and self.test_opt['gaussian_scale'] != None:
@@ -174,7 +174,7 @@ class IRNModel(BaseModel):
 
     def upscale(self, LR_img, scale, gaussian_scale=1):
         Lshape = LR_img.shape
-        zshape = [Lshape[0], Lshape[1] * (scale**2 - 1), Lshape[2], Lshape[3], Lshape[4]]
+        zshape = [Lshape[0], Lshape[1] * (scale ** 2 - 1), Lshape[2], Lshape[3], Lshape[4]]
         y_ = torch.cat((LR_img, gaussian_scale * self.gaussian_batch(zshape)), dim=1)
 
         self.netG.eval()

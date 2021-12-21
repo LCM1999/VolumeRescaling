@@ -2,7 +2,7 @@ import os
 import os.path as osp
 import logging
 import yaml
-from utils.util import OrderedYaml
+from codes.utils.util import OrderedYaml
 Loader, Dumper = OrderedYaml()
 
 
@@ -65,7 +65,7 @@ def parse(opt_path, is_train=True):
 
     # network
     if opt['distortion'] == 'sr':
-        opt['network_G']['scale'] = scale
+        opt['network_IDN']['scale'] = scale
 
     return opt
 

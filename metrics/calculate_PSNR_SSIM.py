@@ -140,7 +140,7 @@ def bgr2ycbcr(img, only_y=True):
         rlt = rlt.round()
     else:
         rlt /= 255.
-    return rlt.astype(in_img_type)
+    return rlt.astype(in_img_type)  
 
 
 if __name__ == '__main__':

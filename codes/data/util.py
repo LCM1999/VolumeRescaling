@@ -690,7 +690,7 @@ if __name__ == '__main__':
     # test imresize3_np
     dir = sys.path[0]
     generator = getTensorGenerator(dir + '/test.vti')
-    vti_GT, component = generator.get_numpy_array(0)
+    vti_GT, component = generator.get_array_by_id(0)
     print(vti_GT.shape)
 
     scale = 1 / 2
@@ -708,5 +708,5 @@ if __name__ == '__main__':
         origin=generator.getOrigin(),
         dimensions=[(x + 1) for x in shape],
     )
-    writer.append_data(data=rlt, name="TL", components=component)
+    writer.append_data_tuple(data=rlt, name="TL", components=component)
     writer.write()

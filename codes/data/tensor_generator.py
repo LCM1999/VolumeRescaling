@@ -22,22 +22,26 @@ class TensorGenerator:
     def update(self):
         self.reader = self._vtk_reader()
         self.data = self.reader.GetOutput()
-        if type(self.data) is vtk.vtkMultiBlockDataSet:
-            if self.data.GetBlock(0).GetPointData().GetNumberOfArrays() != 0:
-                p2c = vtk.vtkPointDataToCellData()
-                p2c.SetInputData(self.data.GetBlock(0))
-                p2c.SetProcessAllArrays(True)
-                p2c.PassPointDataOff()
-                p2c.Update()
-                self.data = p2c.GetOutput()
-        else:
-            if self.data.GetPointData().GetNumberOfArrays() != 0:
-                p2c = vtk.vtkPointDataToCellData()
-                p2c.SetInputData(self.data)
-                p2c.SetProcessAllArrays(True)
-                p2c.PassPointDataOff()
-                p2c.Update()
-                self.data = p2c.GetOutput()
+        try:
+            if type(self.data) is vtk.vtkMultiBlockDataSet:
+                if self.data.GetBlock(0).GetPointData().GetNumberOfArrays() != 0:
+                    p2c = vtk.vtkPointDataToCellData()
+                    p2c.SetInputData(self.data.GetBlock(0))
+                    p2c.SetProcessAllArrays(True)
+                    p2c.PassPointDataOff()
+                    p2c.Update()
+                    self.data = p2c.GetOutput()
+            else:
+                if self.data.GetPointData().GetNumberOfArrays() != 0:
+                    p2c = vtk.vtkPointDataToCellData()
+                    p2c.SetInputData(self.data)
+                    p2c.SetProcessAllArrays(True)
+                    p2c.PassPointDataOff()
+                    p2c.Update()
+                    self.data = p2c.GetOutput()
+        except Exception as e:
+            print("Unsupport dataset type {}".format(type(self.data)))
+            print(e.what())
         EXTENT = self.data.GetExtent()
         self.IJK[0] = EXTENT[1] - EXTENT[0]
         self.IJK[1] = EXTENT[3] - EXTENT[2]
@@ -46,6 +50,8 @@ class TensorGenerator:
     def _vtk_reader(self):
         if self.PATH.endswith('.vti'):
             reader = vtk.vtkXMLImageDataReader()
+        elif self.PATH.endswith('.vtk'):
+            reader = vtk.vtkDataSetReader()
         elif self.PATH.endswith('.dat'):
             reader = vtk.vtkTecplotReader()
         else:
@@ -59,20 +65,46 @@ class TensorGenerator:
 
         return reader
 
-    def get_numpy_array(self, id:int) -> (np.ndarray, int):
-        if not (0 <= id < self.data.GetCellData().GetNumberOfArrays()):
+    def get_array_by_id(self, index: int) -> (np.ndarray, int):
+        if not (0 <= index < self.data.GetCellData().GetNumberOfArrays()):
             ex = Exception("Error: ArrIndex out of bound.")
             raise ex
 
         IJKInArray = self.IJK
         IJKInArray.reverse()
 
-        cdata = self.data.GetCellData().GetArray(id)
-        tuples = cdata.GetNumberOfComponents()
-        array = vtk2np(cdata).reshape(IJKInArray)
-        return array, tuples
+        cdata = self.data.GetCellData().GetArray(index)
+        cellTuples = cdata.GetNumberOfComponents()
+        cellArray = vtk2np(cdata).reshape(IJKInArray)
 
-    def get_numpy_arrays(self) -> np.ndarray:
+        return cellArray, cellTuples
+
+    def get_points_array_by_id(self, index: int) -> (np.ndarray, int):
+        if not (0 <= index < self.data.GetCellData().GetNumberOfArrays()):
+            ex = Exception("Error: ArrIndex out of bound.")
+            raise ex
+
+        IJKInArray = self.IJK
+        IJKInArray.reverse()
+
+        c2p = vtk.vtkCellDataToPointData()
+        c2p.SetInputData(self.data)
+        c2p.Update()
+
+        pdata = c2p.GetOutput().GetPointData().GetArray(index)
+        pointTuples = pdata.GetNumberOfComponents()
+        pointArray = vtk2np(pdata).reshape(IJKInArray)
+
+        return pointArray, pointTuples
+
+    def get_tensor_by_id(self, index: int) -> (torch.Tensor, int):
+        array, tuples = self.get_array_by_id(index)
+        return torch.reshape(
+            torch.from_numpy(array),
+            [1, 1, array.shape[0], array.shape[1], array.shape[2]]
+        ), tuples
+
+    def generate_arrays(self) -> np.ndarray:
         if self.data is None:
             ex = Exception("Error: Data haven't been updated")
             raise ex
@@ -124,8 +156,8 @@ class TensorGenerator:
         """
 
     def generate_tensor(self):
-        tensor = self.get_numpy_arrays()
-        t = torch.from_numpy(tensor)
+        array = self.generate_arrays()
+        t = torch.from_numpy(array)
 
         return t
 

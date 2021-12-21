@@ -11,9 +11,11 @@ import cv2
 import torch
 from torchvision.utils import make_grid
 from shutil import get_terminal_size
-from skimage import metrics
 
 import yaml
+
+from codes.data.tensor_writer import TensorWriter
+
 try:
     from yaml import CLoader as Loader, CDumper as Dumper
 except ImportError:
@@ -94,6 +96,8 @@ def setup_logger(logger_name, root, phase, level=logging.INFO, screen=False, tof
 ####################
 # image convert
 ####################
+def tensor2np(tensor):
+    return tensor.squeeze().numpy()
 
 
 def tensor2img(tensor, out_type=np.uint8, min_max=(0, 1)):
@@ -127,22 +131,48 @@ def save_img(img, img_path, mode='RGB'):
     cv2.imwrite(img_path, img)
 
 
+def save_3d_img(img, path, field, spacing):
+    writer = TensorWriter(filename=path,
+                          spacing=spacing,
+                          dimensions=[x + 1 for x in img.shape])
+    writer.append_data_tuple(data=img, name=field)
+    writer.write()
+
+
 ####################
 # metric
 ####################
+def _cutoff(image, min_val, max_val):
+    image = image.copy()
+    image[image > max_val] = max_val
+    image[image < min_val] = min_val
+    return image
 
 
-# def calculate_psnr(img1, img2):
-#     # img1 and img2 have range [0, 255]
-#     img1 = img1.astype(np.float64)
-#     img2 = img2.astype(np.float64)
-#     mse = np.mean((img1 - img2)**2)
-#     if mse == 0:
-#         return float('inf')
-#     return 20 * math.log10(255.0 / math.sqrt(mse))
-def calculate_psnr(img1,img2):
+def calc_psnr_3d(ref_image, test_image, mask=None, data_range=[None, None]):
+    """Calculates 3D PSNR.
+    Args:
+        ref_image (numpy.ndarray): The reference image.
+        test_image (numpy.ndarray): The testing image.
+        mask (numpy.ndarray): Calculate PSNR in this mask.
+        data_range (iterable[float]): The range of possible values.
 
-    return metrics.peak_signal_noise_ratio(img2,img1)
+    Returns:
+        float: The calculated PSNR.
+    """
+    mask = np.ones_like(ref_image) > 0 if mask is None else mask > 0
+    min_val = np.min(ref_image) if data_range[0] is None else data_range[0]
+    max_val = np.max(ref_image) if data_range[1] is None else data_range[1]
+
+    ref_image = _cutoff(ref_image, min_val, max_val)
+    test_image = _cutoff(test_image, min_val, max_val)
+
+    mse = np.mean((ref_image[mask] - test_image[mask]) ** 2)
+    psnr = 10 * np.log10((max_val - min_val) ** 2 / mse)
+
+    return psnr
+
+
 #
 #
 # def ssim(img1, img2):
@@ -188,8 +218,8 @@ def calculate_psnr(img1,img2):
 #     else:
 #         raise ValueError('Wrong input image dimensions.')
 def calculate_ssim(img1, img2):
+    return metrics.structural_similarity(img1, img2)
 
-    return metrics.structural_similarity(img1,img2)
 
 class ProgressBar(object):
     '''A progress bar which can print the progress

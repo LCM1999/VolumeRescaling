@@ -4,6 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
+from codes.models.modules.Subnet_constructor import default_conv, BasicBlock, ResBlock, DownSampleBlock, SubVoxelUpsampleBlock
+
 
 class InvBlockExp(nn.Module):
     def __init__(self, subnet_constructor, channel_num, channel_split_num, clamp=1.):
@@ -129,4 +131,99 @@ class InvRescaleNet(nn.Module):
             return out, jacobian
         else:
             return out
+
+
+class InvertibleDownsamplingNet(nn.Module):
+    def __init__(self, opt_net):
+        super(InvertibleDownsamplingNet, self).__init__()
+
+        # operations = []
+
+        channel_in = opt_net.get('in_nc', 1)
+        channel_out = opt_net.get('out_nc', 1)
+        kernel_size = opt_net.get('k_size', 3)
+        scale = opt_net.get('scale', 2)
+        res_scale = opt_net.get('res_scale', 0.1)
+
+        current_channel = channel_in
+
+        n_feats = 32
+
+        # for i in range(int(math.log(scale, 2))):
+        encoder_head = [BasicBlock(channel_in=channel_in, channel_out=n_feats, kernel_size=kernel_size)]
+        encoder_body = []
+        for _ in range(opt_net['block_num']):
+            encoder_body.append(
+                ResBlock(n_feats=n_feats,
+                         kernel_size=kernel_size,
+                         res_scale=res_scale))
+        encoder_body.append(default_conv(n_feats, n_feats, kernel_size))
+
+        encoder_tail = [
+            DownSampleBlock(in_channels=n_feats),
+        ]
+
+        self.encoder_head = nn.Sequential(*encoder_head)
+        self.encoder_body = nn.Sequential(*encoder_body)
+        self.encoder_tail = nn.Sequential(*encoder_tail)
+
+        decoder_head = [BasicBlock(channel_in=channel_in, channel_out=n_feats, kernel_size=kernel_size)]
+        decoder_body = []
+        for _ in range(opt_net['block_num']):
+            decoder_body.append(
+                ResBlock(n_feats=n_feats,
+                         kernel_size=kernel_size,
+                         res_scale=res_scale))
+        decoder_body.append(default_conv(n_feats, n_feats, kernel_size))
+
+        decoder_tail = [SubVoxelUpsampleBlock(in_channels=n_feats, scale=scale)]
+
+        self.decoder_head = nn.Sequential(*decoder_head)
+        self.decoder_body = nn.Sequential(*decoder_body)
+        self.decoder_tail = nn.Sequential(*decoder_tail)
+
+    def forward(self, x):
+        x = self.encoder_head(x)
+        x = self.encoder_body(x)
+        LR = self.encoder_tail(x)
+
+        x = self.decoder_head(LR)
+        x = self.decoder_body(x)
+        HR = self.decoder_tail(x)
+
+        return LR, HR
+
+    def encode(self, x):
+        x = self.encoder_head(x)
+        x = self.encoder_body(x)
+        LR = self.encoder_tail(x)
+
+        return LR
+
+    def decode(self, x):
+        x = self.decoder_head(x)
+        x = self.decoder_body(x)
+        HR = self.decoder_tail(x)
+
+        return HR
+
+    def load_state_dict(self, state_dict: 'OrderedDict[str, Tensor]',
+                        strict: bool = True):
+        own_state = self.state_dict()
+        for name, param in state_dict.items():
+            if name in own_state:
+                if isinstance(param, nn.Parameter):
+                    param = param.data
+                try:
+                    own_state[name].copy_(param)
+                except Exception:
+                    if name.find('tail') == -1:
+                        raise RuntimeError('While copying the parameter named {}, '
+                                           'whose dimensions in the model are {} and '
+                                           'whose dimensions in the checkpoint are {}.'
+                                           .format(name, own_state[name].size(), param.size()))
+            elif strict:
+                if name.find('tail') == -1:
+                    raise KeyError('unexpected key "{}" in state_dict'
+                                   .format(name))
 
