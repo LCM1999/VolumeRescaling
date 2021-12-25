@@ -3,7 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from codes.models.modules.Subnet_constructor import UpsampleBlock
-from codes.models.modules.SSIM_3d import SSIM3D
+from codes.models.modules.SSIM_3d import ssim3D
+from codes.models.modules.Sobel_3d import sobel_edge_3d
 from codes.models.modules.MarchingCubes import MarchingCubes
 from codes.models.modules.DistanceField import DistanceField
 import codes.models.modules.funcs as funcs
@@ -12,77 +13,109 @@ from copy import deepcopy
 from concurrent.futures import ProcessPoolExecutor, wait
 
 
+class BorderLoss(nn.Module):
+    def __init__(self):
+        super(BorderLoss, self).__init__()
+        self.upsampler = UpsampleBlock()
+
+    def forward(self, origin, x):
+        upper = (origin.max() - x.max()) ** 2
+        lower = (origin.min() - x.min()) ** 2
+        print("o_min: {}, o_max: {}, x_min: {}, x_max: {}, upper: {}, lower: {}".format(
+            origin.min(), origin.max(), x.min(), x.max(), upper, lower))
+        return upper + lower
+        # if not isLR:
+        #     return abs((origin - x).max())
+        # else:
+        #     upsampled = self.upsampler(x)
+        #     return abs((origin - upsampled).max())
+
+
 class FidelityLoss(nn.Module):
     def __init__(self):
         super(FidelityLoss, self).__init__()
         self.upsampler = UpsampleBlock()
-        self.ssim = SSIM3D()
+        self.normloss = nn.L1Loss()
+        # self.ssim = SSIM3D()
 
-    def forward(self, origin, x, isLR=True):
+    def forward(self, origin, x, isLR=True, addNormLoss=True, addSSIM=False):
+        loss = 0
         if not isLR:
-            return self.ssim.forward(origin, x)
+            if addSSIM:
+                loss = 2 - (ssim3D(origin, x) + 1)
+            if addNormLoss:
+                loss += self.normloss(origin, x)
+            return loss
         else:
             upsampled = self.upsampler(x)
-            return self.ssim(origin, upsampled)
+            if addSSIM:
+                loss = 2 - (ssim3D(origin, upsampled) + 1)
+            if addNormLoss:
+                loss += self.normloss(origin, upsampled)
+            return loss
 
 
 class GradientLoss(nn.Module):
     def __init__(self, scale):
         super(GradientLoss, self).__init__()
         self.scale = scale
-
-        sobel1 = torch.tensor([1, 0, -1], dtype=torch.float)
-        sobel2 = torch.tensor([1, 2, 1], dtype=torch.float)
-
-        sobel_weight1 = [sobel1, sobel1, sobel1]
-        sobel_weight2 = [sobel2, sobel2, sobel2]
-
-        for xyz in range(3):
-            newShape = [1, 1, 1, 1, 1]
-            newShape[xyz + 2] = 3
-            sobel_weight1[xyz] = torch.reshape(sobel1, newShape)
-            sobel_weight2[xyz] = torch.reshape(sobel2, newShape)
-
-        conv_x = []
-        conv_y = []
-        conv_z = []
-
-        tmpconv = nn.Conv3d(in_channels=1, out_channels=1, kernel_size=3, padding=1, stride=1)
-
-        tmpconv.weight = nn.Parameter(sobel_weight1[0])
-        conv_x.append(deepcopy(tmpconv))
-        tmpconv.weight = nn.Parameter(sobel_weight2[1])
-        conv_x.append(deepcopy(tmpconv))
-        tmpconv.weight = nn.Parameter(sobel_weight2[2])
-        conv_x.append(deepcopy(tmpconv))
-
-        tmpconv.weight = nn.Parameter(sobel_weight1[1])
-        conv_y.append(deepcopy(tmpconv))
-        tmpconv.weight = nn.Parameter(sobel_weight2[0])
-        conv_y.append(deepcopy(tmpconv))
-        tmpconv.weight = nn.Parameter(sobel_weight2[2])
-        conv_y.append(deepcopy(tmpconv))
-
-        tmpconv.weight = nn.Parameter(sobel_weight1[2])
-        conv_z.append(deepcopy(tmpconv))
-        tmpconv.weight = nn.Parameter(sobel_weight2[0])
-        conv_z.append(deepcopy(tmpconv))
-        tmpconv.weight = nn.Parameter(sobel_weight2[1])
-        conv_z.append(deepcopy(tmpconv))
-
-        self.conv_x = nn.Sequential(*conv_x)
-        self.conv_y = nn.Sequential(*conv_y)
-        self.conv_z = nn.Sequential(*conv_z)
+        #
+        # sobel1 = torch.tensor([1, 0, -1], dtype=torch.float)
+        # sobel2 = torch.tensor([1, 2, 1], dtype=torch.float)
+        #
+        # sobel_weight1 = [sobel1, sobel1, sobel1]
+        # sobel_weight2 = [sobel2, sobel2, sobel2]
+        #
+        # for xyz in range(3):
+        #     newShape = [1, 1, 1, 1, 1]
+        #     newShape[xyz + 2] = 3
+        #     sobel_weight1[xyz] = torch.reshape(sobel1, newShape)
+        #     sobel_weight2[xyz] = torch.reshape(sobel2, newShape)
+        #
+        # conv_x = []
+        # conv_y = []
+        # conv_z = []
+        #
+        # tmpconv = nn.Conv3d(in_channels=1, out_channels=1, kernel_size=3, padding=1, stride=1)
+        #
+        # tmpconv.weight = nn.Parameter(sobel_weight1[0])
+        # conv_x.append(deepcopy(tmpconv))
+        # tmpconv.weight = nn.Parameter(sobel_weight2[1])
+        # conv_x.append(deepcopy(tmpconv))
+        # tmpconv.weight = nn.Parameter(sobel_weight2[2])
+        # conv_x.append(deepcopy(tmpconv))
+        #
+        # tmpconv.weight = nn.Parameter(sobel_weight1[1])
+        # conv_y.append(deepcopy(tmpconv))
+        # tmpconv.weight = nn.Parameter(sobel_weight2[0])
+        # conv_y.append(deepcopy(tmpconv))
+        # tmpconv.weight = nn.Parameter(sobel_weight2[2])
+        # conv_y.append(deepcopy(tmpconv))
+        #
+        # tmpconv.weight = nn.Parameter(sobel_weight1[2])
+        # conv_z.append(deepcopy(tmpconv))
+        # tmpconv.weight = nn.Parameter(sobel_weight2[0])
+        # conv_z.append(deepcopy(tmpconv))
+        # tmpconv.weight = nn.Parameter(sobel_weight2[1])
+        # conv_z.append(deepcopy(tmpconv))
+        #
+        # self.conv_x = nn.Sequential(*conv_x)
+        # self.conv_y = nn.Sequential(*conv_y)
+        # self.conv_z = nn.Sequential(*conv_z)
 
     def forward(self, o, x, isLR=True):
-        gradient_x = torch.cat([self.conv_x(x), self.conv_y(x), self.conv_z(x)], 1).cpu()
+        gradient_x = sobel_edge_3d(x.cpu())
+        # gradient_x = torch.cat([self.conv_x(x), self.conv_y(x), self.conv_z(x)], 1).cpu()
         l0_x = int(torch.norm(input=gradient_x, p=0).detach().numpy())
-        gradient_o = torch.cat([self.conv_x(o), self.conv_y(o), self.conv_z(o)], 1).cpu()
+        gradient_o = sobel_edge_3d(o.cpu())
+        # gradient_o = torch.cat([self.conv_x(o), self.conv_y(o), self.conv_z(o)], 1).cpu()
         l0_o = int(torch.norm(input=gradient_o, p=0).detach().numpy())
-        if not isLR:
-            return abs(l0_x - l0_o)
+        size_o = gradient_o.numel()
+        print("l0: x: {}, o: {} \n size_o: {}".format(l0_x, l0_o, size_o))
+        if isLR:
+            return abs((self.scale ** 3 * l0_x - l0_o) / size_o)
         else:
-            return abs(self.scale ** 3 * l0_x - l0_o)
+            return abs((l0_x - l0_o) / size_o)
 
 
 def _calculate_distanceFields_h(field: DistanceField):
@@ -91,7 +124,7 @@ def _calculate_distanceFields_h(field: DistanceField):
 
 
 class IsosurfaceSimilarityLoss:
-    def __init__(self, isovalueNum=4, scale=8, DfDownscale=8, numSamples=1500, histSize=128):
+    def __init__(self, isovalueNum=4, scale=1, DfDownscale=8, numSamples=1500, histSize=128):
         self.IsovalueNum = isovalueNum
         self.scale = scale
         self.DfDownscale = DfDownscale
@@ -127,20 +160,25 @@ class IsosurfaceSimilarityLoss:
                                    stop=GT_max,
                                    num=(self.IsovalueNum + 1),
                                    endpoint=False).tolist()[1:]
-        HR_isovalues = np.linspace(start=HR_min,
-                                   stop=HR_max,
-                                   num=(self.IsovalueNum + 1),
-                                   endpoint=False).tolist()[1:]
-        return GT_isovalues, HR_isovalues
+        for value in GT_isovalues:
+            if value < HR_min or value > HR_max:
+                print("value: {}, HR_min: {}, HR_max: {}".format(value, HR_min, HR_max))
+                return None
+        # HR_isovalues = np.linspace(start=HR_min,
+        #                            stop=HR_max,
+        #                            num=(self.IsovalueNum + 1),
+        #                            endpoint=False).tolist()[1:]
+        return GT_isovalues
 
     def _calculate_surfaces(self, approx=True):
         print("Calculating Isosurfaces")
         sampleSurfaces_GT = []
         sampleSurfaces_HR = []
-        GT_isovalues, HR_isovalues = self._calculate_isovalues()
+        GT_isovalues = self._calculate_isovalues()
+        if GT_isovalues is None:
+            return None, None
         print(GT_isovalues)
-        print(HR_isovalues)
-        for GT_isovalue, HR_isovalue in zip(GT_isovalues, HR_isovalues):
+        for GT_isovalue in GT_isovalues:
             print(len(sampleSurfaces_HR))
             approxPoints_GT = []
             approxPoints_HR = []
@@ -152,12 +190,12 @@ class IsosurfaceSimilarityLoss:
                                                      scale=self.scale)
                 approxPoints_HR = \
                     funcs.ApproximateIsosurfaces_CPU(h_data=funcs.getFlatVolume(self.HR),
-                                                     curIsovalue=HR_isovalue,
+                                                     curIsovalue=GT_isovalue,
                                                      dims=self.HR.shape,
                                                      scale=self.scale)
             else:
                 marchingCubes_GT = MarchingCubes(volume=self.GT, isovalue=GT_isovalue)
-                marchingCubes_HR = MarchingCubes(volume=self.HR, isovalue=HR_isovalue)
+                marchingCubes_HR = MarchingCubes(volume=self.HR, isovalue=GT_isovalue)
                 vertices_GT = marchingCubes_GT.marching_cube()
                 vertices_HR = marchingCubes_HR.marching_cube()
                 for vertex_GT, vertex_HR in vertices_GT, vertices_HR:
@@ -254,8 +292,8 @@ class IsosurfaceSimilarityLoss:
                     jointHist[idx][row * self.HIST_SIZE + column] += 1
                     colSums[idx][column] += 1
                     rowSums[idx][row] += 1
-                print("JointHist: {}, \n colSums: {}, \n rowSums: {}".format(
-                    jointHist, colSums, rowSums))
+                # print("JointHist: {}, \n colSums: {}, \n rowSums: {}".format(
+                #     jointHist, colSums, rowSums))
 
                 simMap[i * self.IsovalueNum + j] = \
                     self._calculate_mutualInfo(hist=jointHist[idx],
@@ -267,6 +305,8 @@ class IsosurfaceSimilarityLoss:
 
     def _calculate_similarity(self):
         sampleSurfaces_GT, sampleSurfaces_HR = self._calculate_surfaces()
+        if sampleSurfaces_GT is None or sampleSurfaces_HR is None:
+            return 0
         fields_GT, fields_HR = self._calculate_distanceFields(sampleSurfaces_GT, sampleSurfaces_HR)
         dims = self.GT.shape
         fieldSize = (dims[0] // self.DfDownscale) * \
@@ -274,10 +314,9 @@ class IsosurfaceSimilarityLoss:
                     (dims[2] // self.DfDownscale)
         simMap = self._calculate_similarityMap(fields_GT, fields_HR, fieldSize)
         print(simMap)
-        return np.average(simMap)
+        return np.min(simMap)
 
     def forward(self):
-
         return 1 - self._calculate_similarity()
 
 

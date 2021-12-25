@@ -64,25 +64,43 @@ if __name__ == '__main__':
 
     reader = Reader.TensorGenerator()
     # reader.set_path("E:\\TestYourCode\\test_o.vti")
-    reader.set_path("E:\\pvOutput\\Ocean500g\\TLSI_000.vtk")
+    reader.set_path("E:\\JHTDB\\isotropic1024coarse\\p\\isotropic1024coarse_p_128_0.vti")
     reader.update()
-    arr, tuples = reader.get_tensor_by_id(index=1)
-    arr = torch.as_tensor(arr, dtype=torch.float)
-    print(arr.numpy().shape)
-    gradient = sobel_edge_3d(arr)
-    print(int(torch.norm(input=gradient, p=0, dtype=torch.double).numpy()))
-    gradient = gradient.numpy()
-    print(gradient.shape)
+    arr, tuples = reader.get_tensor_by_id(index=0)
+    (batch, channel, W, H, D) = arr.size()
+    gradient_o = sobel_edge_3d(arr)
+    sizeO = gradient_o.numel()
 
-    print(len(np.where(np.abs(gradient) > 0.0)[0]))
-"""
-writer = Writer.TensorWriter(filename="sobel",
-                                 origin=reader.getOrigin(),
-                                 spacing=reader.getSpacing(),
-                                 dimensions=[x + 1 for x in gradient.shape[2:]])
-    writer.append_data_channels(data=gradient,
-                                name='gradient_pressure',
-                                channel_index=1)
-    writer.write()
-"""
+    scale = 2
+    origin_size = (batch, channel, W, H, D)
+    down_size = (batch, channel, W / 2, H / 2, D / 2)
 
+    downsampled = F.interpolate(input=arr, scale_factor=(1 / 2))
+    gradient_d = sobel_edge_3d(downsampled)
+    sizeD = gradient_d.numel()
+
+    upsampled = F.interpolate(input=downsampled, size=(W, H, D), mode="area")
+    gradient_u = sobel_edge_3d(upsampled)
+    sizeU = gradient_u.numel()
+
+    g_o = int(torch.norm(input=gradient_o, p=0, dtype=torch.double).numpy())
+    g_d = int(torch.norm(input=gradient_d, p=0, dtype=torch.double).numpy())
+    g_u = int(torch.norm(input=gradient_u, p=0, dtype=torch.double).numpy())
+
+    g_o_n = int(torch.norm(input=gradient_o, p=0, dtype=torch.double).numpy()) / gradient_o.numel()
+    g_d_n = int(torch.norm(input=gradient_d, p=0, dtype=torch.double).numpy()) / gradient_d.numel()
+    g_u_n = int(torch.norm(input=gradient_u, p=0, dtype=torch.double).numpy()) / gradient_u.numel()
+
+    # print("Gradient origin: {}, down: {}, up: {}".format(g_o, g_d, g_u))
+    print("Normalize Gradient origin: {}, down: {}, up: {}".format(g_o_n, g_d_n, g_u_n))
+    print("Gradient GTLR: {}".format(abs(scale ** 3 * g_d - g_o) / (scale ** 3 * sizeD - sizeO)))
+    print("Gradient GTHR: {}".format(abs(g_u_n - g_o_n)))
+
+    # writer = Writer.TensorWriter(filename="sobel",
+    #                              origin=reader.getOrigin(),
+    #                              spacing=reader.getSpacing(),
+    #                              dimensions=[x + 1 for x in gradient.shape[2:]])
+    # writer.append_data_channels(data=gradient,
+    #                             name='gradient_pressure',
+    #                             channel_index=1)
+    # writer.write()

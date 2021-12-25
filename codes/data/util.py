@@ -145,13 +145,14 @@ def read_img(env, path, size=None):
     return img
 
 
-def getTensorGenerator(path):
+def getTensorGenerator(path, data_type):
     '''
     read vti by vtk's reader
     return tensor of volume dataset
     '''
     g = TensorGenerator()
     g.set_path(path)
+    g.set_type(data_type)
     g.update()
     return g
 
@@ -704,8 +705,6 @@ if __name__ == '__main__':
 
     writer = TensorWriter(
         filename="rlt",
-        spacing=generator.getSpacing(),
-        origin=generator.getOrigin(),
         dimensions=[(x + 1) for x in shape],
     )
     writer.append_data_tuple(data=rlt, name="TL", components=component)

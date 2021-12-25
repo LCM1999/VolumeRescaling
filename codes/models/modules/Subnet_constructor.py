@@ -125,11 +125,11 @@ class SubVoxelUpsampleBlock(nn.Module):
                       kernel_size=3,
                       padding=1),
             PixelShuffle3d(scale),
-            # nn.ReLU(inplace=True),
             nn.Conv3d(in_channels=in_channels,
                       out_channels=1,
                       kernel_size=3,
                       padding=1),
+            nn.ReLU(inplace=True),
         )
 
     def forward(self, x):

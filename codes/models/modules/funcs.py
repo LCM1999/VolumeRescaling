@@ -123,4 +123,3 @@ def ConvertCellDataToPoints(tuples, cellData: np.ndarray, components=1):
     return pointArray, pointTuples
 
 
-

@@ -143,11 +143,11 @@ class InvertibleDownsamplingNet(nn.Module):
         channel_out = opt_net.get('out_nc', 1)
         kernel_size = opt_net.get('k_size', 3)
         scale = opt_net.get('scale', 2)
-        res_scale = opt_net.get('res_scale', 0.1)
+        res_scale = opt_net.get('res_scale', 0.2)
 
         current_channel = channel_in
 
-        n_feats = 32
+        n_feats = 64
 
         # for i in range(int(math.log(scale, 2))):
         encoder_head = [BasicBlock(channel_in=channel_in, channel_out=n_feats, kernel_size=kernel_size)]
@@ -161,6 +161,7 @@ class InvertibleDownsamplingNet(nn.Module):
 
         encoder_tail = [
             DownSampleBlock(in_channels=n_feats),
+            default_conv(channel_in=channel_in, channel_out=channel_out, kernel_size=kernel_size),
         ]
 
         self.encoder_head = nn.Sequential(*encoder_head)
@@ -176,7 +177,10 @@ class InvertibleDownsamplingNet(nn.Module):
                          res_scale=res_scale))
         decoder_body.append(default_conv(n_feats, n_feats, kernel_size))
 
-        decoder_tail = [SubVoxelUpsampleBlock(in_channels=n_feats, scale=scale)]
+        decoder_tail = [
+            SubVoxelUpsampleBlock(in_channels=n_feats, scale=scale),
+            default_conv(channel_in=channel_in, channel_out=channel_out, kernel_size=kernel_size)
+        ]
 
         self.decoder_head = nn.Sequential(*decoder_head)
         self.decoder_body = nn.Sequential(*decoder_body)
@@ -184,25 +188,25 @@ class InvertibleDownsamplingNet(nn.Module):
 
     def forward(self, x):
         x = self.encoder_head(x)
-        x = self.encoder_body(x)
+        x += self.encoder_body(x)
         LR = self.encoder_tail(x)
 
         x = self.decoder_head(LR)
-        x = self.decoder_body(x)
+        x += self.decoder_body(x)
         HR = self.decoder_tail(x)
 
         return LR, HR
 
     def encode(self, x):
         x = self.encoder_head(x)
-        x = self.encoder_body(x)
+        x += self.encoder_body(x)
         LR = self.encoder_tail(x)
 
         return LR
 
     def decode(self, x):
         x = self.decoder_head(x)
-        x = self.decoder_body(x)
+        x += self.decoder_body(x)
         HR = self.decoder_tail(x)
 
         return HR

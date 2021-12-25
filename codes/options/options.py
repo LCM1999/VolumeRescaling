@@ -35,16 +35,16 @@ def parse(opt_path, is_train=True):
             dataset['dataroot_LQ'] = osp.expanduser(dataset['dataroot_LQ'])
             if dataset['dataroot_LQ'].endswith('lmdb'):
                 is_lmdb = True
-        dataset['data_type'] = 'lmdb' if is_lmdb else 'img'
-        if dataset['mode'].endswith('mc'):  # for memcached
-            dataset['data_type'] = 'mc'
-            dataset['mode'] = dataset['mode'].replace('_mc', '')
+        # dataset['data_type'] = 'lmdb' if is_lmdb else 'img'
+        # if dataset['mode'].endswith('mc'):  # for memcached
+        #     dataset['data_type'] = 'mc'
+        #     dataset['mode'] = dataset['mode'].replace('_mc', '')
 
     # path
     for key, path in opt['path'].items():
         if path and key in opt['path'] and key != 'strict_load':
             opt['path'][key] = osp.expanduser(path)
-    opt['path']['root'] = osp.abspath(osp.join(__file__, osp.pardir, osp.pardir, osp.pardir))
+    opt['path']['root'] = osp.abspath(osp.join(__file__, osp.pardir, osp.pardir, osp.pardir, osp.pardir))
     if is_train:
         experiments_root = osp.join(opt['path']['root'], 'experiments', opt['name'])
         opt['path']['experiments_root'] = experiments_root

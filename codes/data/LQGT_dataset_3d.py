@@ -21,10 +21,10 @@ class LQGTDataset3D(data.Dataset):
         self.opt = opt
         self.paths_GT = None, None
 
-        if opt['type'] == 'vtk':
+        if opt['set_type'] == 'vtk':
             self.paths_GT = util.get_vtk_paths(opt['dataroot_GT'])
             # self.paths_LQ = util.get_vtk_paths(opt['dataroot_LQ'])
-        elif opt['type'] == 'tecplot':
+        elif opt['set_type'] == 'tecplot':
             self.paths_GT = util.get_tecplot_paths(opt['dataroot_GT'])
             # self.paths_LQ = util.get_tecplot_paths(opt['dataroot_LQ'])
         else:
@@ -40,15 +40,14 @@ class LQGTDataset3D(data.Dataset):
         self.random_scale_list = [1]
 
     def __getitem__(self, index):
-        cv2.setNumThreads(0)
+        # cv2.setNumThreads(0)
         scale = self.opt['scale']
         GT_size = self.opt['GT_size']
         attr_id = self.opt.get('attr_id', 0)
 
         # get GT image
         GT_path = self.paths_GT[index]
-        vti_GT_generator = util.getTensorGenerator(GT_path)
-        vti_GT_generator.set_type(self.opt['type'])
+        vti_GT_generator = util.getTensorGenerator(GT_path, self.opt['data_type'])
         vti_GT, component_GT = vti_GT_generator.get_array_by_id(attr_id)
         print('origin GT shape: {}'.format(vti_GT.shape))
         if self.opt['phase'] != 'train':
