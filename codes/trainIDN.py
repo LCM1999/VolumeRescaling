@@ -34,7 +34,7 @@ def main():
                         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
-    args.opt = 'options/train/train_IRN_x2_3d.yml'
+    args.opt = 'options/train/train_IDN_x2_3d.yml'
     opt = option.parse(args.opt, is_train=True)
 
     #### distributed training settings
@@ -151,16 +151,19 @@ def main():
         if opt['dist']:
             train_sampler.set_epoch(epoch)
         for _, train_data in enumerate(train_loader):
-            print('training,train_data,GT,LQ',_,train_data['GT'].shape,train_data['LQ'].shape)
+            print('training,train_data,GT,', _, train_data['GT'].shape)
             current_step += 1
             if current_step > total_iters:
                 break
             #### training
             model.feed_data(train_data)
-            model.optimize_parameters(current_step)
+            loss = model.optimize_parameters(current_step)
 
             #### update learning rate
-            model.update_learning_rate(current_step, warmup_iter=opt['train']['warmup_iter'])
+            model.update_learning_rate(current_step,
+                                       warmup_iter=opt['train']['warmup_iter'],
+                                       isRS=True,
+                                       loss=loss)
 
             #### log
             if current_step % opt['logger']['print_freq'] == 0:
@@ -186,7 +189,7 @@ def main():
                 for val_data in val_loader:
                     print('validation,start')
                     idx += 1
-                    img_name = os.path.splitext(os.path.basename(val_data['LQ_path'][0]))[0]
+                    img_name = os.path.splitext(os.path.basename(val_data['GT_path'][0]))[0]
                     img_dir = os.path.join(opt['path']['val_images'], img_name)
                     util.mkdir(img_dir)
 
@@ -194,33 +197,36 @@ def main():
                     model.test()
 
                     visuals = model.get_current_visuals()
-                    sr_img = util.tensor2img(visuals['SR'])  # uint8
-                    gt_img = util.tensor2img(visuals['GT'])  # uint8
+                    hr_img = util.tensor2np(visuals['HR'])  # uint8
+                    gt_img = util.tensor2np(visuals['GT'])  # uint8
+                    lr_img = util.tensor2np(visuals['LR'])
+                    # gtl_img = util.tensor2img(visuals['LR_ref'])
 
-                    lr_img = util.tensor2img(visuals['LR'])
-
-                    gtl_img = util.tensor2img(visuals['LR_ref'])
-
-                    # Save SR images for reference
-                    save_img_path = os.path.join(img_dir,
-                                                 '{:s}_{:d}.png'.format(img_name, current_step))
-                    util.save_img(sr_img, save_img_path)
+                    # Save HR images for reference
+                    save_HR_img_path = os.path.join(img_dir,
+                                                    '{:s}_{:d}'.format(img_name, current_step))
+                    util.save_3d_img(hr_img, save_HR_img_path,
+                                     field=opt['datasets']['val']['field'],
+                                     spacing=(1, 1, 1))
 
                     # Save LR images
-                    save_img_path_L = os.path.join(img_dir, '{:s}_forwLR_{:d}.png'.format(img_name, current_step))
-                    util.save_img(lr_img, save_img_path_L)
+                    save_LR_img_path = os.path.join(img_dir, '{:s}_forwLR_{:d}'.format(img_name, current_step))
+                    util.save_3d_img(lr_img, save_LR_img_path,
+                                     field=opt['datasets']['val']['field'],
+                                     spacing=(1, 1, 1))
 
+                    print("HR path: {} \nLR path: {}".format(save_HR_img_path, save_LR_img_path))
                     # Save ground truth
-                    if current_step == opt['train']['val_freq']:
-                        save_img_path_gt = os.path.join(img_dir, '{:s}_GT_{:d}.png'.format(img_name, current_step))
-                        util.save_img(gt_img, save_img_path_gt)
-                        save_img_path_gtl = os.path.join(img_dir, '{:s}_LR_ref_{:d}.png'.format(img_name, current_step))
-                        util.save_img(gtl_img, save_img_path_gtl)
-                   # calculate PSNR
+                    # if current_step == opt['train']['val_freq']:
+                    #     save_img_path_gt = os.path.join(img_dir, '{:s}_GT_{:d}.png'.format(img_name, current_step))
+                    #     util.save_img(gt_img, save_img_path_gt)
+                    #     save_img_path_gtl = os.path.join(img_dir, '{:s}_LR_ref_{:d}.png'.format(img_name, current_step))
+                    #     util.save_img(gtl_img, save_img_path_gtl)
+                    # calculate PSNR
                     crop_size = opt['scale']
-                    cropped_sr_img = sr_img[crop_size:-crop_size, crop_size:-crop_size, :]
-                    cropped_gt_img = gt_img[crop_size:-crop_size, crop_size:-crop_size, :]
-                    avg_psnr += util.calculate_psnr(cropped_sr_img , cropped_gt_img )
+                    cropped_hr_img = hr_img[crop_size:-crop_size, crop_size:-crop_size, crop_size:-crop_size]
+                    cropped_gt_img = gt_img[crop_size:-crop_size, crop_size:-crop_size, crop_size:-crop_size]
+                    avg_psnr += util.calc_psnr_3d(cropped_gt_img, cropped_hr_img)
 
                 avg_psnr = avg_psnr / idx
                 # model.device = torch.device('cuda' if opt['gpu_ids'] is not None else 'cpu')

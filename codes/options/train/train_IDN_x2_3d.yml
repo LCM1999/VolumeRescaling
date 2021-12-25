@@ -1,9 +1,9 @@
 
 #### general settings
 
-name: 01_IRN_DB_x2_scratch_DAT1
+name: 01_IDN_DB_x2_scratch_JHTDB
 use_tb_logger: true
-model: IRN
+model: IDN
 distortion: sr
 scale: 2
 gpu_ids: [0]
@@ -13,46 +13,49 @@ gpu_ids: [0]
 
 datasets:
   train:
-    name: DAT1
-    mode: LQGT3D
-    attr_id: 0
-    type: tecplot
-    dataroot_GT: 'H:/CVcodes/3d-SR/data/dat' #'H:/CVcodes/3d-SR/data' # path to training HR images
+    name: JHTDB_VTK
+    mode: GT3D
+    set_type: vtk
+    data_type: point
+    dataroot_GT: 'E:/JHTDB/isotropic1024coarse/p' #'E:/JHTDB/isotropic1024coarse/p1' # path to training HR images
     dataroot_LQ: ~ # path to training reference LR images, not necessary, if not provided, LR images will be generated in dataloader
 
     use_shuffle: true
     n_workers: 4  # per GPU
-    batch_size: 2
-    GT_size: 36
+    batch_size: 1
+    GT_size: 130
     use_flip: true
     use_rot: true
     color: RGB
 
   val:
     name: val_VTI1
-    mode: LQGT3D
-    attr_id: 0
-    type: tecplot
-    dataroot_GT: 'H:/CVcodes/3d-SR/data/dat' # path to validation HR images
+    mode: GT3D
+    set_type: vtk
+    data_type: point
+    field: pressure
+    dataroot_GT: 'E:/JHTDB/isotropic1024coarse/p' # path to validation HR images 'E:/JHTDB/isotropic1024coarse/p1'
     dataroot_LQ: ~ # path to validation reference LR images, not necessary, if not provided, LR images will be generated in dataloader
 
 
 #### network structures
 
-network_G:
+network_IDN:
   which_model_G:
       subnet_type: DBNet
   in_nc: 1
   out_nc: 1
-  block_num: [2]
+  k_size: 3
+  block_num: 2
   scale: 2
+  res_scale: 0.1
   init: xavier
 
 
 #### path
 
 path:
-  pretrain_model_G: ~
+  pretrain_model_G: ~ # pretrain_model_IDN
   strict_load: true
   resume_state: ~
 
@@ -60,13 +63,16 @@ path:
 #### training settings: learning rate scheme, loss
 
 train:
-  lr_G: !!float 2e-4
+  lr: !!float 2e-4
   beta1: 0.9
   beta2: 0.999
-  niter: 5 #500000
+  niter: 500 #500000
   warmup_iter: -1  # no warm up
 
-  lr_scheme: MultiStepLR
+  lr_scheme: ReduceLROnPlateau_Restart
+  lr_factor: 0.3
+  lr_patience: 10
+  lr_threshold: 0.00001
   lr_steps: [100000, 200000, 300000, 400000]
   lr_gamma: 0.5
 
@@ -77,10 +83,13 @@ train:
 
   val_freq: 1 #!!float 5e3
 
-  lambda_fit_forw: 4.
-  lambda_rec_back: 1
-  lambda_ce_forw: 1
-  weight_decay_G: !!float 1e-5
+#  lambda_border: 1
+  lambda_fidelity_GTLR: 1
+  lambda_fidelity_GTHR: 10
+  lambda_gradient_GTLR: 1
+  lambda_gradient_GTHR: 1
+  lambda_isosurface_similarity: 5
+  weight_decay: !!float 1e-5
   gradient_clipping: 10
 
 

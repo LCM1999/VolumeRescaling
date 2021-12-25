@@ -9,6 +9,8 @@ def create_model(opt):
         from .IRN_model import IRNModel as M
     elif model == 'IRN+':
         from .IRNp_model import IRNpModel as M
+    elif model == 'IDN':
+        from .InvertibleDownsample import InvertibleDownsample as M
     else:
         raise NotImplementedError('Model [{:s}] not recognized.'.format(model))
     m = M(opt)

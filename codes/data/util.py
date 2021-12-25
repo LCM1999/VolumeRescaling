@@ -145,13 +145,14 @@ def read_img(env, path, size=None):
     return img
 
 
-def getTensorGenerator(path):
+def getTensorGenerator(path, data_type):
     '''
     read vti by vtk's reader
     return tensor of volume dataset
     '''
     g = TensorGenerator()
     g.set_path(path)
+    g.set_type(data_type)
     g.update()
     return g
 
@@ -690,7 +691,7 @@ if __name__ == '__main__':
     # test imresize3_np
     dir = sys.path[0]
     generator = getTensorGenerator(dir + '/test.vti')
-    vti_GT, component = generator.get_numpy_array(0)
+    vti_GT, component = generator.get_array_by_id(0)
     print(vti_GT.shape)
 
     scale = 1 / 2
@@ -704,9 +705,7 @@ if __name__ == '__main__':
 
     writer = TensorWriter(
         filename="rlt",
-        spacing=generator.getSpacing(),
-        origin=generator.getOrigin(),
         dimensions=[(x + 1) for x in shape],
     )
-    writer.append_data(data=rlt, name="TL", components=component)
+    writer.append_data_tuple(data=rlt, name="TL", components=component)
     writer.write()

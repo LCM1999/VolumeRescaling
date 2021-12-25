@@ -2,10 +2,17 @@ import math
 from collections import Counter
 from collections import defaultdict
 import torch
-from torch.optim.lr_scheduler import _LRScheduler
+from torch.optim.lr_scheduler import MultiStepLR, CosineAnnealingLR, ReduceLROnPlateau
 
 
-class MultiStepLR_Restart(_LRScheduler):
+class ReduceLROnPlateau_Restart(ReduceLROnPlateau):
+    def __init__(self, optimizer, factor, patience, threshold):
+        super(ReduceLROnPlateau_Restart, self).__init__(optimizer, mode='min', factor=factor,
+                                                        patience=patience, threshold=threshold,
+                                                        threshold_mode='rel', verbose=True)
+
+
+class MultiStepLR_Restart(MultiStepLR):
     def __init__(self, optimizer, milestones, restarts=None, weights=None, gamma=0.1,
                  clear_state=False, last_epoch=-1):
         self.milestones = Counter(milestones)
@@ -31,7 +38,7 @@ class MultiStepLR_Restart(_LRScheduler):
         ]
 
 
-class CosineAnnealingLR_Restart(_LRScheduler):
+class CosineAnnealingLR_Restart(CosineAnnealingLR):
     def __init__(self, optimizer, T_period, restarts=None, weights=None, eta_min=0, last_epoch=-1):
         self.T_period = T_period
         self.T_max = self.T_period[0]  # current T period

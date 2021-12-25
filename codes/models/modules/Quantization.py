@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 class Quant(torch.autograd.Function):
 
     @staticmethod
@@ -12,6 +13,7 @@ class Quant(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         return grad_output
+
 
 class Quantization(nn.Module):
     def __init__(self):
