@@ -23,7 +23,7 @@ datasets:
     use_shuffle: true
     n_workers: 4  # per GPU
     batch_size: 1
-    GT_size: 130
+    GT_size: 128
     use_flip: true
     use_rot: true
     color: RGB
@@ -46,7 +46,7 @@ network_IDN:
   in_nc: 1
   out_nc: 1
   k_size: 3
-  block_num: 2
+  block_num: 3
   scale: 2
   res_scale: 0.1
   init: xavier
@@ -66,7 +66,7 @@ train:
   lr: !!float 2e-4
   beta1: 0.9
   beta2: 0.999
-  niter: 300 #500000
+  niter: 5000 #500000 100set, 50 epoch
   warmup_iter: -1  # no warm up
 
   lr_scheme: ReduceLROnPlateau_Restart
@@ -84,11 +84,11 @@ train:
   val_freq: 1 #!!float 5e3
 
 #  lambda_border: 1
-  lambda_fidelity_GTLR: 1
-  lambda_fidelity_GTHR: 10
-  lambda_gradient_GTLR: 1
+#  lambda_fidelity_GTLR: 1
+  lambda_fidelity_GTHR: 1
+#  lambda_gradient_GTLR: 1
   lambda_gradient_GTHR: 1
-  lambda_isosurface_similarity: 5
+  lambda_isosurface_similarity: 0.001
   weight_decay: !!float 1e-5
   gradient_clipping: 10
 

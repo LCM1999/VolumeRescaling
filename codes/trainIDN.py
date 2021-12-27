@@ -226,6 +226,7 @@ def main():
                     crop_size = opt['scale']
                     cropped_hr_img = hr_img[crop_size:-crop_size, crop_size:-crop_size, crop_size:-crop_size]
                     cropped_gt_img = gt_img[crop_size:-crop_size, crop_size:-crop_size, crop_size:-crop_size]
+
                     avg_psnr += util.calc_psnr_3d(cropped_gt_img, cropped_hr_img)
 
                 avg_psnr = avg_psnr / idx

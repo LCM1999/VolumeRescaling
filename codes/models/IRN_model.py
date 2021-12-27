@@ -189,7 +189,7 @@ class IRNModel(BaseModel):
 
     def get_current_visuals(self):
         out_dict = OrderedDict()
-        out_dict['LR_ref'] = self.ref_L.detach()[0].float().cpu()
+        # out_dict['LR_ref'] = self.ref_L.detach()[0].float().cpu()
         out_dict['SR'] = self.fake_H.detach()[0].float().cpu()
         out_dict['LR'] = self.forw_L.detach()[0].float().cpu()
         out_dict['GT'] = self.real_H.detach()[0].float().cpu()

@@ -83,6 +83,8 @@ class LQGTDataset3D(data.Dataset):
             Z, Y, X = vti_GT.shape
             if Z < GT_size or Y < GT_size or X < GT_size:
                 vti_GT = util.resize_3d(np.copy(vti_GT), newsize=GT_size)
+            elif Z > GT_size or Y > GT_size or X > GT_size:
+                vti_GT = util.modcrop_3d(vti_GT, scale)
                 # using matlab imresize3
                 # vti_LQ = util.imresize3_np(vti_GT, 1 / scale, True)
                 # if vti_LQ.ndim != 2:

@@ -134,7 +134,7 @@ def save_img(img, img_path, mode='RGB'):
 def save_3d_img(img, path, field, spacing):
     writer = TensorWriter(filename=path,
                           spacing=spacing,
-                          dimensions=[x + 1 for x in img.shape])
+                          dimensions=img.shape)
     writer.append_data_tuple(data=img, name=field)
     writer.write()
 

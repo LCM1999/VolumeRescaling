@@ -10,7 +10,7 @@ class TensorWriter:
         self.grid.SetOrigin(origin)
         self.grid.SetSpacing(spacing)
         self.grid.SetDimensions(dimensions)
-        self.tuples = self.grid.GetNumberOfCells()
+        self.tuples = self.grid.GetNumberOfPoints()
 
     def append_data_tuple(self, data: np.ndarray, name, components=1, isPoint=True) -> int:
         if data.size != self.tuples:
@@ -115,8 +115,5 @@ class TensorWriter:
             return self.grid.GetCellData().GetNumberOfArrays()
 
     def write(self):
-        if self.grid.GetCellData().GetNumberOfArrays() <= 0:
-            ex = Exception("No data to Write")
-            raise ex
         self.writer.SetInputData(self.grid)
         self.writer.Write()

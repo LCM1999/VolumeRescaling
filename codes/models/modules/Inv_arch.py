@@ -187,13 +187,13 @@ class InvertibleDownsamplingNet(nn.Module):
         self.decoder_tail = nn.Sequential(*decoder_tail)
 
     def forward(self, x):
-        x = self.encoder_head(x)
-        x += self.encoder_body(x)
-        LR = self.encoder_tail(x)
+        x1 = self.encoder_head(x)
+        x2 = x1 + self.encoder_body(x1)
+        LR = self.encoder_tail(x2)
 
-        x = self.decoder_head(LR)
-        x += self.decoder_body(x)
-        HR = self.decoder_tail(x)
+        x3 = self.decoder_head(LR)
+        x4 = x3 + self.decoder_body(x3)
+        HR = self.decoder_tail(x4)
 
         return LR, HR
 

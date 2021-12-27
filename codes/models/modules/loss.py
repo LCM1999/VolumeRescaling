@@ -1,3 +1,5 @@
+import sys
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -39,20 +41,21 @@ class FidelityLoss(nn.Module):
         # self.ssim = SSIM3D()
 
     def forward(self, origin, x, isLR=True, addNormLoss=True, addSSIM=False):
-        loss = 0
+        ssimloss = 0
+        normloss = 0
         if not isLR:
             if addSSIM:
-                loss = 2 - (ssim3D(origin, x) + 1)
+                ssimloss = 2 - (ssim3D(origin, x) + 1)
             if addNormLoss:
-                loss += self.normloss(origin, x)
-            return loss
+                normloss = self.normloss(origin, x)
+            return ssimloss, normloss
         else:
             upsampled = self.upsampler(x)
             if addSSIM:
-                loss = 2 - (ssim3D(origin, upsampled) + 1)
+                ssimloss = 2 - (ssim3D(origin, upsampled) + 1)
             if addNormLoss:
-                loss += self.normloss(origin, upsampled)
-            return loss
+                normloss = self.normloss(origin, upsampled)
+            return ssimloss, normloss
 
 
 class GradientLoss(nn.Module):
@@ -123,15 +126,28 @@ def _calculate_distanceFields_h(field: DistanceField):
     return field
 
 
+def float_distance_square(v1, v2):
+    x_2 = (v2[0] - v1[0]) ** 2
+    y_2 = (v2[1] - v1[1]) ** 2
+    z_2 = (v2[2] - v1[2]) ** 2
+    return x_2 + y_2 + z_2
+
+
 class IsosurfaceSimilarityLoss:
-    def __init__(self, isovalueNum=4, scale=1, DfDownscale=8, numSamples=1500, histSize=128):
+    def __init__(self, data_type, isovalueNum=6, scale=1, DfDownscale=8, numSamples=1500, histSize=128, approx=True):
         self.IsovalueNum = isovalueNum
         self.scale = scale
+        self.DataType = data_type
         self.DfDownscale = DfDownscale
         self.NUM_SAMPLES = numSamples
         self.HIST_SIZE = histSize
+        self.Approx = approx
+        self.shape = None
         self.GT = None
         self.HR = None
+        self.loss = None
+        if self.Approx:
+            self.loss = nn.L1Loss()
 
     def setGTHR(self, GT, HR, isTensor=True):
         if isTensor:
@@ -140,8 +156,13 @@ class IsosurfaceSimilarityLoss:
         else:
             self.GT = GT
             self.HR = HR
-        self.GT, _ = funcs.ConvertCellDataToPoints(tuples=self.GT.size, cellData=self.GT)
-        self.HR, _ = funcs.ConvertCellDataToPoints(tuples=self.HR.size, cellData=self.HR)
+        if self.DataType == 'cell':
+            self.GT, _ = funcs.ConvertCellDataToPoints(tuples=self.GT.size, cellData=self.GT)
+            self.HR, _ = funcs.ConvertCellDataToPoints(tuples=self.HR.size, cellData=self.HR)
+        if self.GT.shape == self.HR.shape:
+            self.shape = self.GT.shape
+        else:
+            raise Exception("GT shape {} != HR shape {}".format(self.GT.shape, self.HR.shape))
 
     def _findBucket_d(self, val, minVal, step, id1, id2):
         if step == 0:
@@ -160,17 +181,20 @@ class IsosurfaceSimilarityLoss:
                                    stop=GT_max,
                                    num=(self.IsovalueNum + 1),
                                    endpoint=False).tolist()[1:]
+        isovalues = []
         for value in GT_isovalues:
-            if value < HR_min or value > HR_max:
-                print("value: {}, HR_min: {}, HR_max: {}".format(value, HR_min, HR_max))
-                return None
+            if HR_min < value < HR_max:
+                isovalues.append(value)
+        if len(isovalues) == 0:
+            print("value: {}, HR_min: {}, HR_max: {}".format(GT_isovalues[0], HR_min, HR_max))
+            return None
         # HR_isovalues = np.linspace(start=HR_min,
         #                            stop=HR_max,
         #                            num=(self.IsovalueNum + 1),
         #                            endpoint=False).tolist()[1:]
         return GT_isovalues
 
-    def _calculate_surfaces(self, approx=True):
+    def _calculate_surfaces(self):
         print("Calculating Isosurfaces")
         sampleSurfaces_GT = []
         sampleSurfaces_HR = []
@@ -182,7 +206,7 @@ class IsosurfaceSimilarityLoss:
             print(len(sampleSurfaces_HR))
             approxPoints_GT = []
             approxPoints_HR = []
-            if approx:
+            if self.Approx:
                 approxPoints_GT = \
                     funcs.ApproximateIsosurfaces_CPU(h_data=funcs.getFlatVolume(self.GT),
                                                      curIsovalue=GT_isovalue,
@@ -205,6 +229,41 @@ class IsosurfaceSimilarityLoss:
             sampleSurfaces_HR.append(approxPoints_HR)
         print("Calculating Isosurfaces Finished")
         return sampleSurfaces_GT, sampleSurfaces_HR
+
+    def _calculate_Approx_field(self, surface):
+        dscale = self.DfDownscale
+        single_dims = (self.shape[0] // dscale,
+                       self.shape[1] // dscale,
+                       self.shape[2] // dscale)
+        field = np.zeros(single_dims)
+        for i in range(single_dims[0]):
+            for j in range(single_dims[1]):
+                for k in range(single_dims[2]):
+                    cur = sys.float_info.max
+                    for point in surface:
+                        distance_square = float_distance_square((i * dscale + dscale / 2,
+                                                                 j * dscale + dscale / 2,
+                                                                 k * dscale + dscale / 2),
+                                                                point)
+                        if distance_square < cur:
+                            field[i][j][k] = distance_square
+                            cur = distance_square
+        return field
+
+    def _calculate_distance_fields_APPROX(self, surfaces_GT, surfaces_HR):
+        print("Calculating Distance Fields APPROX")
+        fields_GT = []
+        fields_HR = []
+        for sampleSurface_GT, sampleSurface_HR in zip(surfaces_GT, surfaces_HR):
+            fields_GT.append(self._calculate_Approx_field(sampleSurface_GT))
+            fields_HR.append(self._calculate_Approx_field(sampleSurface_HR))
+        print("Calculating Distance Fields APPROX Finished")
+        print("Calculating L1Loss")
+        fields_GT_tensor = torch.tensor(fields_GT)
+        fields_HR_tensor = torch.tensor(fields_HR)
+        loss = self.loss.forward(fields_GT_tensor, fields_HR_tensor)
+        print("Calculating L1Loss Finished")
+        return loss
 
     def _calculate_distanceFields(self, surfaces_GT, surfaces_HR):
         print("Calculating Distance Fields")
@@ -306,7 +365,10 @@ class IsosurfaceSimilarityLoss:
     def _calculate_similarity(self):
         sampleSurfaces_GT, sampleSurfaces_HR = self._calculate_surfaces()
         if sampleSurfaces_GT is None or sampleSurfaces_HR is None:
-            return 0
+            return None
+        if self.Approx:
+            loss = self._calculate_distance_fields_APPROX(sampleSurfaces_GT, sampleSurfaces_HR)
+            return loss
         fields_GT, fields_HR = self._calculate_distanceFields(sampleSurfaces_GT, sampleSurfaces_HR)
         dims = self.GT.shape
         fieldSize = (dims[0] // self.DfDownscale) * \
@@ -317,7 +379,14 @@ class IsosurfaceSimilarityLoss:
         return np.min(simMap)
 
     def forward(self):
-        return 1 - self._calculate_similarity()
+        res = self._calculate_similarity()
+        if res is None:
+            return 1
+        elif self.Approx:
+            return res
+        else:
+            return (1 - res) * 1000
+        # return 1 - self._calculate_similarity()
 
 
 class ReconstructionLoss(nn.Module):
@@ -402,12 +471,13 @@ if __name__ == '__main__':
     from copy import deepcopy
 
     reader = Reader.TensorGenerator()
-    reader.set_path("D:\\testHalfTL\\half3.vtk")
+    reader.set_path("D:\\testHalfTL\\test_0.vti")
+    reader.set_type('point')
     # reader.set_path("E:\\JHTDB\\isotropic1024coarse\\p\\isotropic1024coarse_p_128_0.vti")
     reader.update()
     cellGT, _ = reader.get_array_by_id(index=0)
     print(cellGT.size)
-    reader.set_path("D:\\testHalfTL\\half4.vtk")
+    reader.set_path("D:\\testHalfTL\\isotropic1024coarse_p_128_0_100.vti")
     reader.update()
     cellHR, _ = reader.get_array_by_id(index=0)
     # cellHR = deepcopy(cellGT)
@@ -416,9 +486,6 @@ if __name__ == '__main__':
     # pointGT, _ = ConvertCellDataToPoints(tuples=cellGT.size, cellData=cellGT)
     # pointHR, _ = ConvertCellDataToPoints(tuples=cellHR.size, cellData=cellHR)
 
-    IsoLossTest = IsosurfaceSimilarityLoss()
+    IsoLossTest = IsosurfaceSimilarityLoss(data_type='point', scale=8)
     IsoLossTest.setGTHR(cellGT, cellHR, isTensor=False)
     print(IsoLossTest.forward())
-
-
-

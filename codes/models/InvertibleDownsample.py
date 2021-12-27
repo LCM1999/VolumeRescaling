@@ -47,8 +47,8 @@ class InvertibleDownsample(BaseModel):
             # loss
             # TODO: impl our loss -- Fidelity loss, Gradient loss, Iso-surface loss
             self.FidelityLoss = FidelityLoss().cuda()
-            self.GradientLoss = GradientLoss(scale=self.train_opt.get('scale', 2)).cuda()
-            self.IsosurfacesSimilarityLoss = IsosurfaceSimilarityLoss(scale=64)
+            # self.GradientLoss = GradientLoss(scale=self.train_opt.get('scale', 2)).cuda()
+            self.IsosurfacesSimilarityLoss = IsosurfaceSimilarityLoss(scale=1, approx=True)
             # self.Reconstruction_forw = ReconstructionLoss(losstype=self.train_opt['pixel_criterion_forw'])
             # self.Reconstruction_back = ReconstructionLoss(losstype=self.train_opt['pixel_criterion_back'])
 
@@ -106,9 +106,9 @@ class InvertibleDownsample(BaseModel):
     def loss_forward(self, GT, LR, HR):
         # l_forw_Border = self.BorderLoss.forward(GT, HR, isLR=False)
         # l_forw_Fidelity_GTLR = self.FidelityLoss.forward(GT, LR, isLR=True)
-        l_forw_Fidelity_GTHR = self.FidelityLoss.forward(GT, HR, isLR=False)
+        l_forw_Fidelity_ssim, l_forw_Fidelity_norm = self.FidelityLoss.forward(GT, HR, isLR=False, addSSIM=True)
         # l_forw_Gradient_GTLR = self.GradientLoss.forward(GT, LR, isLR=True)
-        l_forw_Gradient_GTHR = self.GradientLoss.forward(GT, HR, isLR=False)
+        # l_forw_Gradient_GTHR = self.GradientLoss.forward(GT, HR, isLR=False)
         # print("BorderLoss: {}".format(l_forw_Border))
         # print("Gradient: LR: {}, HR: {}".format(l_forw_Gradient_GTLR, l_forw_Gradient_GTHR))
         self.IsosurfacesSimilarityLoss.setGTHR(GT, HR)
@@ -117,7 +117,7 @@ class InvertibleDownsample(BaseModel):
         # z = z.reshape([out.shape[0], -1])
         # l_forw_ce = self.train_opt['lambda_ce_forw'] * torch.sum(z ** 2) / z.shape[0]
 
-        return l_forw_Fidelity_GTHR, l_forw_Gradient_GTHR, l_forw_IsosurfaceSimilarity
+        return l_forw_Fidelity_ssim, l_forw_Fidelity_norm, l_forw_IsosurfaceSimilarity
 
     def optimize_parameters(self, step):
         self.optimizer_model.zero_grad()
@@ -133,7 +133,7 @@ class InvertibleDownsample(BaseModel):
         # TODO: compute loss here ----from here to
         # LR_ref = self.ref_L.detach()
 
-        loss_Fidelity_GTHR, loss_Gradient_GTHR, loss_IsosurfaceSimilarity = \
+        loss_Fidelity_ssim, loss_Fidelity_norm, loss_IsosurfaceSimilarity = \
             self.loss_forward(GT=self.input, LR=self.output_LR, HR=self.output_HR)
 
         # backward upscaling
@@ -148,7 +148,7 @@ class InvertibleDownsample(BaseModel):
 
         # total loss
         loss = \
-            self.train_opt['lambda_fidelity_GTHR'] * loss_Fidelity_GTHR + self.train_opt['lambda_gradient_GTHR'] * loss_Gradient_GTHR + self.train_opt['lambda_isosurface_similarity'] * loss_IsosurfaceSimilarity
+            self.train_opt['lambda_fidelity_GTHR'] * loss_Fidelity_ssim + self.train_opt['lambda_gradient_GTHR'] * loss_Fidelity_norm + self.train_opt['lambda_isosurface_similarity'] * loss_IsosurfaceSimilarity
         # self.train_opt['lambda_fidelity_GTLR'] * loss_Fidelity_GTLR \
         # + self.train_opt['lambda_gradient_GTLR'] * loss_Gradient_GTLR \
         # self.train_opt['lambda_border'] * loss_Border \
@@ -164,9 +164,10 @@ class InvertibleDownsample(BaseModel):
 
         # set log
         # self.log_dict['loss_Fidelity_GTLR'] = loss_Fidelity_GTLR
-        self.log_dict['loss_Fidelity_GTHR'] = loss_Fidelity_GTHR
+        self.log_dict['loss_Fidelity_ssim'] = loss_Fidelity_ssim
+        self.log_dict['loss_Fidelity_norm'] = loss_Fidelity_norm
         # self.log_dict['loss_Gradient_GTLR'] = loss_Gradient_GTLR
-        self.log_dict['loss_Gradient_GTHR'] = loss_Gradient_GTHR
+        # self.log_dict['loss_Gradient_GTHR'] = loss_Gradient_GTHR
         self.log_dict['loss_Isosurface_Similarity'] = loss_IsosurfaceSimilarity
 
         # print("After optimize, GT size: {}".format(self.input.size()))
